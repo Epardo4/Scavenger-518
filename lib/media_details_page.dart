@@ -5,7 +5,7 @@ import 'tmdb_service.dart';
 
 class MediaDetailsPage extends StatefulWidget {
   final int mediaId;
-  final Media mediaType;
+  final MediaType mediaType;
 
   const MediaDetailsPage({
     super.key,
@@ -24,7 +24,7 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
   bool _isLoading = true;
   String? _errorMessage;
 
-  bool get _isMovie => widget.mediaType == Media.movie;
+  bool get _isMovie => widget.mediaType == MediaType.movie;
 
   @override
   void initState() {
@@ -86,10 +86,7 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
             const SizedBox(height: 16),
             Text(_errorMessage!),
             const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _retry,
-              child: const Text('Try Again'),
-            ),
+            ElevatedButton(onPressed: _retry, child: const Text('Try Again')),
           ],
         ),
       );
@@ -114,7 +111,8 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
     final releaseDate = _isMovie
         ? media['release_date'] as String? ?? ''
         : media['first_air_date'] as String? ?? '';
-    final genres = (media['genres'] as List?)
+    final genres =
+        (media['genres'] as List?)
             ?.map((genre) => genre['name'].toString())
             .toList() ??
         [];
@@ -142,15 +140,9 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                _buildSection(
-                  title: 'Genres',
-                  child: _buildGenres(genres),
-                ),
+                _buildSection(title: 'Genres', child: _buildGenres(genres)),
                 const SizedBox(height: 20),
-                _buildSection(
-                  title: 'Cast',
-                  child: _buildCast(cast),
-                ),
+                _buildSection(title: 'Cast', child: _buildCast(cast)),
                 const SizedBox(height: 25),
                 _buildWatchlistButton(),
                 const SizedBox(height: 20),
@@ -353,10 +345,7 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
           );
         },
         icon: const Icon(Icons.bookmark_add_outlined),
-        label: const Text(
-          'Add to Watchlist',
-          style: TextStyle(fontSize: 16),
-        ),
+        label: const Text('Add to Watchlist', style: TextStyle(fontSize: 16)),
       ),
     );
   }
@@ -370,9 +359,6 @@ class _InfoChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Chip(
-      avatar: Icon(icon, size: 17),
-      label: Text(text),
-    );
+    return Chip(avatar: Icon(icon, size: 17), label: Text(text));
   }
 }
