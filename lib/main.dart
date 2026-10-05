@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+import 'media.dart';
+import 'media_details_page.dart';
+import 'tmdb_service.dart';
+
 void main() {
   runApp(const MyApp());
 }
@@ -7,115 +11,186 @@ void main() {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'Scavenger',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const MovieSearchPage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+class MovieSearchPage extends StatefulWidget {
+  const MovieSearchPage({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<MovieSearchPage> createState() => _MovieSearchPageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _MovieSearchPageState extends State<MovieSearchPage> {
+  final TmdbService _tmdbService = TmdbService();
+  final TextEditingController _queryController = TextEditingController();
 
-  void _incrementCounter() {
+  List<Media> _results = [];
+  bool _isLoading = false;
+  String? _errorMessage;
+  bool _hasSearched = false;
+
+  @override
+  void dispose() {
+    _queryController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _search() async {
+    final query = _queryController.text.trim();
+    if (query.isEmpty) {
+      setState(() {
+        _results = [];
+        _errorMessage = null;
+        _hasSearched = false;
+      });
+      return;
+    }
+
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      _isLoading = true;
+      _errorMessage = null;
+      _hasSearched = true;
     });
+
+    try {
+      final results = await _tmdbService.searchMoviesAndTvShows(query);
+      if (!mounted) return;
+      setState(() {
+        _results = results;
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _results = [];
+        _isLoading = false;
+        _errorMessage = 'Unable to load results from the movie database.';
+      });
+    }
+  }
+
+  void _openDetails(Media media) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) =>
+            MediaDetailsPage(mediaId: media.id, mediaType: media.type),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+      appBar: AppBar(title: const Text('Movie Search')),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _queryController,
+                    textInputAction: TextInputAction.search,
+                    decoration: const InputDecoration(
+                      labelText: 'Search movies and TV shows',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.search),
+                    ),
+                    onSubmitted: (_) => _search(),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                FilledButton(
+                  onPressed: _isLoading ? null : _search,
+                  child: const Text('Search'),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+          Expanded(child: _buildResults()),
+        ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
+    );
+  }
+
+  Widget _buildResults() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_errorMessage != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(_errorMessage!, textAlign: TextAlign.center),
+        ),
+      );
+    }
+
+    if (!_hasSearched) {
+      return const Center(
+        child: Text('Search the movie database to see a title.'),
+      );
+    }
+
+    if (_results.isEmpty) {
+      return const Center(
+        child: Text('No movies or TV shows matched that search.'),
+      );
+    }
+
+    return ListView.separated(
+      itemCount: _results.length,
+      separatorBuilder: (context, index) => const Divider(height: 1),
+      itemBuilder: (context, index) {
+        final media = _results[index];
+        final year = media.releaseDate.length >= 4
+            ? media.releaseDate.substring(0, 4)
+            : '';
+
+        return ListTile(
+          leading: _poster(media),
+          title: Text(media.title),
+          subtitle: Text(
+            [
+              media.type == MediaType.movie ? 'Movie' : 'TV Show',
+              if (year.isNotEmpty) year,
+              media.rating.toStringAsFixed(1),
+            ].join(' · '),
+          ),
+          onTap: () => _openDetails(media),
+        );
+      },
+    );
+  }
+
+  Widget _poster(Media media) {
+    if (media.posterUrl.isEmpty) {
+      return const SizedBox(width: 40, height: 60, child: Icon(Icons.movie));
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(4),
+      child: Image.network(
+        media.posterUrl,
+        width: 40,
+        height: 60,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) =>
+            const SizedBox(width: 40, height: 60, child: Icon(Icons.movie)),
       ),
     );
   }

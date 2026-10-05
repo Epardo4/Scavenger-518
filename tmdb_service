@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'media.dart';
+import 'package:scavenger_518/media.dart';
 
 class TmdbService {
   static const String baseUrl = 'https://api.themoviedb.org/3';

@@ -1,17 +1,21 @@
 import 'dart:convert';
+
 import 'package:http/http.dart' as http;
+
 import 'media.dart';
 
 class TmdbService {
   static const String baseUrl = 'https://api.themoviedb.org/3';
 
-  final String accessToken = 'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI1N2Y2ZjQzYjc3OWE3N2JmMDU5NWYyM2QxZjkzMWU0MyIsIm5iZiI6MTc5MTE0MDcwNy4zMTIsInN1YiI6IjZhYzJhMzYzZGY3ZDdhZmUyYjJhNWRkMiIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.Qyxl0GhOjesmW0kRLmVFeBMO6Y-iMOnaPn3IOHDc7IM';
-
+  final String accessToken =
+      'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI1N2Y2ZjQzYjc3OWE3N2JmMDU5NWYyM2QxZjkzMWU0MyIsIm5iZiI6MTc5MTE0MDcwNy4zMTIsInN1YiI6IjZhYzJhMzYzZGY3ZDdhZmUyYjJhNWRkMiIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.Qyxl0GhOjesmW0kRLmVFeBMO6Y-iMOnaPn3IOHDc7IM';
 
   Future<Map<String, dynamic>> getMovieDetails(int movieId) async {
-    
-    final url = Uri.parse('$baseUrl/movie/$movieId?language=en-US' '&append_to_response=credits', );
-    
+    final url = Uri.parse(
+      '$baseUrl/movie/$movieId?language=en-US'
+      '&append_to_response=credits',
+    );
+
     final response = await http.get(
       url,
       headers: {
@@ -24,15 +28,15 @@ class TmdbService {
       return jsonDecode(response.body);
     }
 
-    throw Exception(
-      'Failed to load movie details: ${response.statusCode}',
-    );
+    throw Exception('Failed to load movie details: ${response.statusCode}');
   }
 
   Future<Map<String, dynamic>> getTvDetails(int tvId) async {
-    
-    final url = Uri.parse('$baseUrl/tv/$tvId?language=en-US' '&append_to_response=credits', );
-    
+    final url = Uri.parse(
+      '$baseUrl/tv/$tvId?language=en-US'
+      '&append_to_response=credits',
+    );
+
     final response = await http.get(
       url,
       headers: {
@@ -45,13 +49,10 @@ class TmdbService {
       return jsonDecode(response.body);
     }
 
-    throw Exception(
-      'Failed to load TV show details: ${response.statusCode}',
-    );
+    throw Exception('Failed to load TV show details: ${response.statusCode}');
   }
 
-
-Future<List<Media>> searchMoviesAndTvShows(String query) async {
+  Future<List<Media>> searchMoviesAndTvShows(String query) async {
     if (query.trim().isEmpty) {
       return [];
     }
@@ -59,14 +60,10 @@ Future<List<Media>> searchMoviesAndTvShows(String query) async {
     final movieResults = await _searchMovies(query);
     final tvResults = await _searchTvShows(query);
 
-    return [
-      ...movieResults,
-      ...tvResults,
-    ];
+    return [...movieResults, ...tvResults];
   }
 
-
-Future<List<Media>> _searchMovies(String query) async {
+  Future<List<Media>> _searchMovies(String query) async {
     final encodedQuery = Uri.encodeQueryComponent(query);
 
     final url = Uri.parse(
@@ -86,9 +83,7 @@ Future<List<Media>> _searchMovies(String query) async {
     );
 
     if (response.statusCode != 200) {
-      throw Exception(
-        'Movie search failed: ${response.statusCode}',
-      );
+      throw Exception('Movie search failed: ${response.statusCode}');
     }
 
     final data = jsonDecode(response.body);
@@ -108,9 +103,7 @@ Future<List<Media>> _searchMovies(String query) async {
     }).toList();
   }
 
-
-
-Future<List<Media>> _searchTvShows(String query) async {
+  Future<List<Media>> _searchTvShows(String query) async {
     final encodedQuery = Uri.encodeQueryComponent(query);
 
     final url = Uri.parse(
@@ -130,9 +123,7 @@ Future<List<Media>> _searchTvShows(String query) async {
     );
 
     if (response.statusCode != 200) {
-      throw Exception(
-        'TV show search failed: ${response.statusCode}',
-      );
+      throw Exception('TV show search failed: ${response.statusCode}');
     }
 
     final data = jsonDecode(response.body);
@@ -143,7 +134,7 @@ Future<List<Media>> _searchTvShows(String query) async {
       return Media(
         id: tv['id'],
         title: tv['name'] ?? 'Unknown title',
-        posterPath: tv['poster_path'] ?? '',    
+        posterPath: tv['poster_path'] ?? '',
         overview: tv['overview'] ?? 'No overview available.',
         releaseDate: tv['first_air_date'] ?? '',
         rating: (tv['vote_average'] ?? 0).toDouble(),
@@ -151,7 +142,4 @@ Future<List<Media>> _searchTvShows(String query) async {
       );
     }).toList();
   }
-
-
-
 }

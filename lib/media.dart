@@ -1,43 +1,29 @@
-enum Media{ 
-    movie, 
-    tvshow,
-}
+enum MediaType { movie, tv }
 
-class MediaItem{
-    final int id;
-    final Media mediaType;
-    final String title;
-    final String genre;
-    final String posterPath;
-    final String actors;
-    final String plot;
-    final String rating;
-    final String reviews;
-    final String trailer;
-    final String streamingPlatform;
-    final List <String> cast;
+class Media {
+  final int id;
+  final String title;
+  final String posterPath;
+  final String overview;
+  final String releaseDate;
+  final double rating;
+  final MediaType type;
 
-    MediaItem({
-        required this.id,
-        required this.mediaType,
-        required this.title,
-        required this.genre,
-        required this.posterPath,
-        required this.actors,
-        required this.plot,
-        required this.rating,
-        required this.reviews,
-        required this.trailer,
-        required this.streamingPlatform,
-        required this.cast,
-    });
+  const Media({
+    required this.id,
+    required this.title,
+    required this.posterPath,
+    required this.overview,
+    required this.releaseDate,
+    required this.rating,
+    required this.type,
+  });
 
-String get posterUrl {
+  String get posterUrl {
     if (posterPath.isEmpty) {
       return '';
     }
 
     return 'https://image.tmdb.org/t/p/w500$posterPath';
   }
-
 }
