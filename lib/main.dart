@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'media.dart';
 import 'media_details_page.dart';
 import 'tmdb_service.dart';
+import 'search_screen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -20,178 +21,178 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: const MovieSearchPage(),
+      home: const SearchScreen(),
     );
   }
 }
 
-class MovieSearchPage extends StatefulWidget {
-  const MovieSearchPage({super.key});
+// class MovieSearchPage extends StatefulWidget {
+//   const MovieSearchPage({super.key});
 
-  @override
-  State<MovieSearchPage> createState() => _MovieSearchPageState();
-}
+//   @override
+//   State<MovieSearchPage> createState() => _MovieSearchPageState();
+// }
 
-class _MovieSearchPageState extends State<MovieSearchPage> {
-  final TmdbService _tmdbService = TmdbService();
-  final TextEditingController _queryController = TextEditingController();
+// class _MovieSearchPageState extends State<MovieSearchPage> {
+//   final TmdbService _tmdbService = TmdbService();
+//   final TextEditingController _queryController = TextEditingController();
 
-  List<Media> _results = [];
-  bool _isLoading = false;
-  String? _errorMessage;
-  bool _hasSearched = false;
+//   List<Media> _results = [];
+//   bool _isLoading = false;
+//   String? _errorMessage;
+//   bool _hasSearched = false;
 
-  @override
-  void dispose() {
-    _queryController.dispose();
-    super.dispose();
-  }
+//   @override
+//   void dispose() {
+//     _queryController.dispose();
+//     super.dispose();
+//   }
 
-  Future<void> _search() async {
-    final query = _queryController.text.trim();
-    if (query.isEmpty) {
-      setState(() {
-        _results = [];
-        _errorMessage = null;
-        _hasSearched = false;
-      });
-      return;
-    }
+//   Future<void> _search() async {
+//     final query = _queryController.text.trim();
+//     if (query.isEmpty) {
+//       setState(() {
+//         _results = [];
+//         _errorMessage = null;
+//         _hasSearched = false;
+//       });
+//       return;
+//     }
 
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-      _hasSearched = true;
-    });
+//     setState(() {
+//       _isLoading = true;
+//       _errorMessage = null;
+//       _hasSearched = true;
+//     });
 
-    try {
-      final results = await _tmdbService.searchMoviesAndTvShows(query);
-      if (!mounted) return;
-      setState(() {
-        _results = results;
-        _isLoading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _results = [];
-        _isLoading = false;
-        _errorMessage = 'Unable to load results from the movie database.';
-      });
-    }
-  }
+//     try {
+//       final results = await _tmdbService.searchMoviesAndTvShows(query);
+//       if (!mounted) return;
+//       setState(() {
+//         _results = results;
+//         _isLoading = false;
+//       });
+//     } catch (_) {
+//       if (!mounted) return;
+//       setState(() {
+//         _results = [];
+//         _isLoading = false;
+//         _errorMessage = 'Unable to load results from the movie database.';
+//       });
+//     }
+//   }
 
-  void _openDetails(Media media) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (context) =>
-            MediaDetailsPage(mediaId: media.id, mediaType: media.type),
-      ),
-    );
-  }
+//   void _openDetails(Media media) {
+//     Navigator.of(context).push(
+//       MaterialPageRoute<void>(
+//         builder: (context) =>
+//             MediaDetailsPage(mediaId: media.id, mediaType: media.type),
+//       ),
+//     );
+//   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Movie Search')),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _queryController,
-                    textInputAction: TextInputAction.search,
-                    decoration: const InputDecoration(
-                      labelText: 'Search movies and TV shows',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.search),
-                    ),
-                    onSubmitted: (_) => _search(),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                FilledButton(
-                  onPressed: _isLoading ? null : _search,
-                  child: const Text('Search'),
-                ),
-              ],
-            ),
-          ),
-          Expanded(child: _buildResults()),
-        ],
-      ),
-    );
-  }
+//   @override
+//   Widget build(BuildContext context) {
+//     return Scaffold(
+//       appBar: AppBar(title: const Text('Movie Search')),
+//       body: Column(
+//         children: [
+//           Padding(
+//             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+//             child: Row(
+//               children: [
+//                 Expanded(
+//                   child: TextField(
+//                     controller: _queryController,
+//                     textInputAction: TextInputAction.search,
+//                     decoration: const InputDecoration(
+//                       labelText: 'Search movies and TV shows',
+//                       border: OutlineInputBorder(),
+//                       prefixIcon: Icon(Icons.search),
+//                     ),
+//                     onSubmitted: (_) => _search(),
+//                   ),
+//                 ),
+//                 const SizedBox(width: 12),
+//                 FilledButton(
+//                   onPressed: _isLoading ? null : _search,
+//                   child: const Text('Search'),
+//                 ),
+//               ],
+//             ),
+//           ),
+//           Expanded(child: _buildResults()),
+//         ],
+//       ),
+//     );
+//   }
 
-  Widget _buildResults() {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+//   Widget _buildResults() {
+//     if (_isLoading) {
+//       return const Center(child: CircularProgressIndicator());
+//     }
 
-    if (_errorMessage != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(_errorMessage!, textAlign: TextAlign.center),
-        ),
-      );
-    }
+//     if (_errorMessage != null) {
+//       return Center(
+//         child: Padding(
+//           padding: const EdgeInsets.all(24),
+//           child: Text(_errorMessage!, textAlign: TextAlign.center),
+//         ),
+//       );
+//     }
 
-    if (!_hasSearched) {
-      return const Center(
-        child: Text('Search the movie database to see a title.'),
-      );
-    }
+//     if (!_hasSearched) {
+//       return const Center(
+//         child: Text('Search the movie database to see a title.'),
+//       );
+//     }
 
-    if (_results.isEmpty) {
-      return const Center(
-        child: Text('No movies or TV shows matched that search.'),
-      );
-    }
+//     if (_results.isEmpty) {
+//       return const Center(
+//         child: Text('No movies or TV shows matched that search.'),
+//       );
+//     }
 
-    return ListView.separated(
-      itemCount: _results.length,
-      separatorBuilder: (context, index) => const Divider(height: 1),
-      itemBuilder: (context, index) {
-        final media = _results[index];
-        final year = media.releaseDate.length >= 4
-            ? media.releaseDate.substring(0, 4)
-            : '';
+//     return ListView.separated(
+//       itemCount: _results.length,
+//       separatorBuilder: (context, index) => const Divider(height: 1),
+//       itemBuilder: (context, index) {
+//         final media = _results[index];
+//         final year = media.releaseDate.length >= 4
+//             ? media.releaseDate.substring(0, 4)
+//             : '';
 
-        return ListTile(
-          leading: _poster(media),
-          title: Text(media.title),
-          subtitle: Text(
-            [
-              media.type == MediaType.movie ? 'Movie' : 'TV Show',
-              if (year.isNotEmpty) year,
-              media.rating.toStringAsFixed(1),
-            ].join(' · '),
-          ),
-          onTap: () => _openDetails(media),
-        );
-      },
-    );
-  }
+//         return ListTile(
+//           leading: _poster(media),
+//           title: Text(media.title),
+//           subtitle: Text(
+//             [
+//               media.type == MediaType.movie ? 'Movie' : 'TV Show',
+//               if (year.isNotEmpty) year,
+//               media.rating.toStringAsFixed(1),
+//             ].join(' · '),
+//           ),
+//           onTap: () => _openDetails(media),
+//         );
+//       },
+//     );
+//   }
 
-  Widget _poster(Media media) {
-    if (media.posterUrl.isEmpty) {
-      return const SizedBox(width: 40, height: 60, child: Icon(Icons.movie));
-    }
+//   Widget _poster(Media media) {
+//     if (media.posterUrl.isEmpty) {
+//       return const SizedBox(width: 40, height: 60, child: Icon(Icons.movie));
+//     }
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(4),
-      child: Image.network(
-        media.posterUrl,
-        width: 40,
-        height: 60,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) =>
-            const SizedBox(width: 40, height: 60, child: Icon(Icons.movie)),
-      ),
-    );
-  }
-}
+//     return ClipRRect(
+//       borderRadius: BorderRadius.circular(4),
+//       child: Image.network(
+//         media.posterUrl,
+//         width: 40,
+//         height: 60,
+//         fit: BoxFit.cover,
+//         errorBuilder: (context, error, stackTrace) =>
+//             const SizedBox(width: 40, height: 60, child: Icon(Icons.movie)),
+//       ),
+//     );
+//   }
+//}
