@@ -5,7 +5,9 @@ import 'media_details_page.dart';
 import 'Models/media.dart';
 
 class SearchScreen extends StatefulWidget {
-  const SearchScreen({Key? key}) : super(key: key);
+  final String? initialQuery;
+
+  const SearchScreen({Key? key, this.initialQuery}) : super(key: key);
 
   @override
   _SearchScreenState createState() => _SearchScreenState();
@@ -21,12 +23,15 @@ class _SearchScreenState extends State<SearchScreen> {
   bool _hasSearched = false;
   String? _errorMessage;
 
-  String _selectedMediaType = 'ALL';
+  String _selectedMediaType = 'ALL'; 
   int? _selectedGenreId;
 
   @override
   void initState() {
     super.initState();
+    if (widget.initialQuery != null && widget.initialQuery!.trim().isNotEmpty) {
+      _searchController.text = widget.initialQuery!.trim();
+    }
     _loadGenres();
   }
 
@@ -36,6 +41,10 @@ class _SearchScreenState extends State<SearchScreen> {
       setState(() {
         _genreMap = genres;
       });
+
+      if (_searchController.text.trim().isNotEmpty && !_hasSearched) {
+        _performSearch();
+      }
     }
   }
 
@@ -54,15 +63,19 @@ class _SearchScreenState extends State<SearchScreen> {
 
     try {
       final results = await _apiService.searchTitles(query, _genreMap);
-      setState(() {
-        _allResults = results;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _allResults = results;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _errorMessage = e.toString();
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString();
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -128,10 +141,12 @@ class _SearchScreenState extends State<SearchScreen> {
               ),
             ),
           ),
+
           if (_hasSearched && !_isLoading && _allResults.isNotEmpty) ...[
             _buildFilterSection(),
             const Divider(height: 1),
           ],
+
           Expanded(
             child: _buildResultsView(),
           ),

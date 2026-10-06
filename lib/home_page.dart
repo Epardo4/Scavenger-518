@@ -14,6 +14,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final TmdbService _tmdbService = TmdbService();
+  final TextEditingController _homeSearchController = TextEditingController();
 
   List<Media> _topMovies = [];
   List<Media> _topTvShows = [];
@@ -24,6 +25,12 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _loadTopRatedContent();
+  }
+
+  @override
+  void dispose() {
+    _homeSearchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadTopRatedContent() async {
@@ -58,11 +65,11 @@ class _HomePageState extends State<HomePage> {
     await FirebaseAuth.instance.signOut();
   }
 
-  void _navigateToSearch(BuildContext context) {
+  void _navigateToSearch(BuildContext context, {String? initialQuery}) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => const SearchScreen(),
+        builder: (context) => SearchScreen(initialQuery: initialQuery),
       ),
     );
   }
@@ -77,6 +84,15 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
     );
+  }
+
+  void _handleHomeSearchSubmit() {
+    final query = _homeSearchController.text.trim();
+    if (query.isNotEmpty) {
+      _navigateToSearch(context, initialQuery: query);
+    } else {
+      _navigateToSearch(context);
+    }
   }
 
   @override
@@ -159,32 +175,29 @@ class _HomePageState extends State<HomePage> {
 
               const SizedBox(height: 16),
 
-              // Search Bar Trigger
+              // Interactive Search Input Bar
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: Card(
-                  elevation: 1,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () => _navigateToSearch(context),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 12,
-                        horizontal: 16,
-                      ),
-                      child: Row(
-                        children: const [
-                          Icon(Icons.search, color: Colors.deepPurple),
-                          SizedBox(width: 12),
-                          Text(
-                            'Search movies & TV shows...',
-                            style: TextStyle(color: Colors.grey, fontSize: 15),
-                          ),
-                        ],
-                      ),
+                child: TextField(
+                  controller: _homeSearchController,
+                  textInputAction: TextInputAction.search,
+                  onSubmitted: (_) => _handleHomeSearchSubmit(),
+                  decoration: InputDecoration(
+                    hintText: 'Search movies & TV shows...',
+                    prefixIcon: const Icon(Icons.search, color: Colors.deepPurple),
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.arrow_forward),
+                      onPressed: _handleHomeSearchSubmit,
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey[100],
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      vertical: 14,
+                      horizontal: 16,
                     ),
                   ),
                 ),
