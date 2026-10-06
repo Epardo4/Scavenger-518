@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'media.dart';
 import 'media_details_page.dart';
 import 'tmdb_service.dart';
-import 'search_screen.dart';
+import 'auth_page.dart';
 
 void main() {
   runApp(const MyApp());
@@ -21,7 +21,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: const SearchScreen(),
+      home: const AuthPage(),
     );
   }
 }
