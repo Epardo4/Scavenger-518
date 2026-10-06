@@ -56,84 +56,75 @@ class _AuthPageState extends State<AuthPage>{
     }
 
     //handles login/sign up
-    Future<void> submit() async{
-      if(isLoading) return;
+    Future<void> submit() async {
+      if (isLoading) return;
 
-      if(emailController.text.trim().isEmpty){
+      final email = emailController.text.trim();
+      final password = passwordController.text.trim();
+      final confirmPassword = confirmPasswordController.text.trim();
+
+      if (email.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please enter your email address.')
-          )
+          const SnackBar(content: Text('Please enter your email address.')),
         );
         return;
       }
 
-      if(passwordController.text.trim().isEmpty){
+      if (password.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please enter your password.'))
+          const SnackBar(content: Text('Please enter your password.')),
         );
         return;
       }
 
-      if(!isLogin){
-        if(passwordController.text.length < 6){
+      if (!isLogin) {
+        if (password.length < 6) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Password must be at least 6 characters.'))
+            const SnackBar(content: Text('Password must be at least 6 characters.')),
           );
+          return; // Fix: Only return if password is less than 6 chars
         }
-        return;
+
+        if (password != confirmPassword) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Passwords do not match.')),
+          );
+          return; // Fix: Only return if passwords don't match
+        }
       }
 
-      if(!isLogin && passwordController.text != confirmPasswordController.text){
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Passwords do not match.'))
-        );
-        return;
-      }
+      try {
+        setState(() { isLoading = true; });
 
-      try{
-        setState(() {isLoading = true;});
-        if(isLogin){
+        if (isLogin) {
           await FirebaseAuth.instance.signInWithEmailAndPassword(
-            email: emailController.text.trim(),
-            password: passwordController.text.trim()
+            email: email,
+            password: password,
           );
-        }
-        else{
-          if(passwordController.text != confirmPasswordController.text){
-            if(!mounted) return;
-
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Passwords do not match.')
-              )
-            );
-
-            return;
-          }
-          
-
+        } else {
           await FirebaseAuth.instance.createUserWithEmailAndPassword(
-            email: emailController.text.trim(),
-            password: passwordController.text.trim()
+            email: email,
+            password: password,
           );
         }
 
-        if(!mounted) return;
+        if (!mounted) return;
 
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(
-            isLogin ? 'Successfully logged in!' : 'Account Created Successfully',
-          ))
+          SnackBar(
+            content: Text(
+              isLogin ? 'Successfully logged in!' : 'Account Created Successfully',
+            ),
+          ),
         );
-      } on FirebaseException catch(e){
-        if(!mounted) return;
+      } on FirebaseAuthException catch (e) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.code))
+          SnackBar(content: Text(e.message ?? e.code)),
         );
-      }finally{
-        if(mounted){
-          setState(() {isLoading = false;});
+      } finally {
+        if (mounted) {
+          setState(() { isLoading = false; });
         }
       }
     }
