@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'tmdb_service.dart';
-import 'models/search_result.dart';
+import 'Models/search_result.dart';
 import 'media_details_page.dart';
-import 'media.dart';
+import 'Models/media.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({Key? key}) : super(key: key);
@@ -21,9 +21,8 @@ class _SearchScreenState extends State<SearchScreen> {
   bool _hasSearched = false;
   String? _errorMessage;
 
-  // Filter States
-  String _selectedMediaType = 'ALL'; // 'ALL', 'MOVIE', 'TV'
-  int? _selectedGenreId; // null means all genres
+  String _selectedMediaType = 'ALL';
+  int? _selectedGenreId;
 
   @override
   void initState() {
@@ -50,7 +49,7 @@ class _SearchScreenState extends State<SearchScreen> {
       _isLoading = true;
       _errorMessage = null;
       _hasSearched = true;
-      _selectedGenreId = null; // Reset genre filter on new search
+      _selectedGenreId = null;
     });
 
     try {
@@ -67,14 +66,11 @@ class _SearchScreenState extends State<SearchScreen> {
     }
   }
 
-  // Filter results client-side
   List<SearchResult> get _filteredResults {
     return _allResults.where((item) {
-      // Media Type Filter
       if (_selectedMediaType != 'ALL' && item.type != _selectedMediaType) {
         return false;
       }
-      // Genre Filter
       if (_selectedGenreId != null && !item.genreIds.contains(_selectedGenreId)) {
         return false;
       }
@@ -82,7 +78,6 @@ class _SearchScreenState extends State<SearchScreen> {
     }).toList();
   }
 
-  // Extract list of unique genres present in the current search results
   List<MapEntry<int, String>> get _availableResultGenres {
     final Set<int> presentGenreIds = {};
     for (var item in _allResults) {
@@ -108,7 +103,6 @@ class _SearchScreenState extends State<SearchScreen> {
       ),
       body: Column(
         children: [
-          // --- Search Bar ---
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: TextField(
@@ -134,14 +128,10 @@ class _SearchScreenState extends State<SearchScreen> {
               ),
             ),
           ),
-
-          // --- Filters Bar (Shown after search) ---
           if (_hasSearched && !_isLoading && _allResults.isNotEmpty) ...[
             _buildFilterSection(),
             const Divider(height: 1),
           ],
-
-          // --- Results View ---
           Expanded(
             child: _buildResultsView(),
           ),
@@ -159,7 +149,6 @@ class _SearchScreenState extends State<SearchScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Media Type Segment Selector
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: Row(
@@ -189,7 +178,6 @@ class _SearchScreenState extends State<SearchScreen> {
 
           if (availableGenres.isNotEmpty) ...[
             const SizedBox(height: 6),
-            // Horizontal Genre Chips
             SizedBox(
               height: 40,
               child: ListView.builder(
@@ -267,138 +255,110 @@ class _SearchScreenState extends State<SearchScreen> {
       );
     }
 
-    return ListView.builder(
+    return GridView.builder(
+      padding: const EdgeInsets.all(16),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        childAspectRatio: 0.52,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 16,
+      ),
       itemCount: filteredList.length,
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
       itemBuilder: (context, index) {
         final result = filteredList[index];
 
-        return Card(
-          elevation: 2,
-          margin: const EdgeInsets.symmetric(vertical: 6),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(10),
+        return InkWell(
+          borderRadius: BorderRadius.circular(10),
           onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => MediaDetailsPage(
-                          mediaId: result.id,
-                          // Convert the String ('MOVIE' / 'TV') to MediaType enum
-                          mediaType: result.type.toUpperCase() == 'MOVIE'
-                              ? MediaType.movie
-                              : MediaType.tv,
-                        ),
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => MediaDetailsPage(
+                  mediaId: result.id,
+                  mediaType: result.type.toUpperCase() == 'MOVIE'
+                      ? MediaType.movie
+                      : MediaType.tv,
+                ),
+              ),
+            );
+          },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: result.imageUrl.isNotEmpty
+                            ? Image.network(
+                                result.imageUrl,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => _posterPlaceholder(),
+                              )
+                            : _posterPlaceholder(),
                       ),
-                    );
-                  },
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Row(
-                children: [
-                  // Poster Image
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: SizedBox(
-                      width: 60,
-                      height: 90,
-                      child: result.imageUrl.isNotEmpty
-                          ? Image.network(
-                              result.imageUrl,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => Container(
-                                color: Colors.grey[300],
-                                child: const Icon(Icons.movie, color: Colors.grey),
-                              ),
-                            )
-                          : Container(
-                              color: Colors.grey[300],
-                              child: const Icon(Icons.movie, color: Colors.grey),
-                            ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-
-                  // Metadata & Genres
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          result.name,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                    Positioned(
+                      bottom: 6,
+                      right: 6,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
                         ),
-                        const SizedBox(height: 4),
-
-                        // Media Type & Year Badges
-                        Row(
+                        decoration: BoxDecoration(
+                          color: Colors.black87,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: result.type == 'MOVIE'
-                                    ? Colors.blue[50]
-                                    : Colors.purple[50],
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                result.type,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: result.type == 'MOVIE'
-                                      ? Colors.blue[800]
-                                      : Colors.purple[800],
-                                ),
+                            const Icon(
+                              Icons.star,
+                              color: Colors.amber,
+                              size: 12,
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              result.rating.toStringAsFixed(1),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
-                            if (result.year != null) ...[
-                              const SizedBox(width: 8),
-                              Text(
-                                '${result.year}',
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                            ],
                           ],
                         ),
-                        const SizedBox(height: 6),
-
-                        // Genre Tag Chips
-                        if (result.genreNames.isNotEmpty)
-                          Text(
-                            result.genreNames.join(' • '),
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[700],
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                      ],
+                      ),
                     ),
-                  ),
-
-                  const Icon(Icons.chevron_right, color: Colors.grey),
-                ],
+                  ],
+                ),
               ),
-            ),
+              const SizedBox(height: 6),
+              Text(
+                result.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
         );
       },
+    );
+  }
+
+  Widget _posterPlaceholder() {
+    return Container(
+      color: Colors.grey[300],
+      child: const Center(
+        child: Icon(Icons.movie, size: 40, color: Colors.grey),
+      ),
     );
   }
 }

@@ -2,9 +2,9 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-import 'media.dart';
+import 'Models/media.dart';
 
-import 'models/search_result.dart';
+import 'Models/search_result.dart';
 
 class TmdbService {
   static const String baseUrl = 'https://api.themoviedb.org/3';
@@ -100,12 +100,10 @@ class TmdbService {
         final List<dynamic> results = data['results'] ?? [];
 
         return results
-            // Filter out 'person' search results
             .where((item) =>
                 item['media_type'] == 'movie' || item['media_type'] == 'tv')
             .map((item) {
               final result = SearchResult.fromJson(item);
-              // Map genre IDs to human-readable names
               result.genreNames = result.genreIds
                   .map((id) => genreMap[id])
                   .whereType<String>()
@@ -212,5 +210,49 @@ class TmdbService {
         type: MediaType.tv,
       );
     }).toList();
+  }
+
+  Future<List<Media>> getTopRatedMovies() async {
+    final url = Uri.parse('$baseUrl/movie/top_rated?language=en-US&page=1');
+    final response = await http.get(url, headers: _headers);
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      final results = data['results'] as List;
+      return results.take(10).map((movie) {
+        return Media(
+          id: movie['id'],
+          title: movie['title'] ?? 'Unknown title',
+          posterPath: movie['poster_path'] ?? '',
+          overview: movie['overview'] ?? 'No overview available.',
+          releaseDate: movie['release_date'] ?? '',
+          rating: (movie['vote_average'] ?? 0).toDouble(),
+          type: MediaType.movie,
+        );
+      }).toList();
+    }
+    throw Exception('Failed to load top rated movies');
+  }
+
+  Future<List<Media>> getTopRatedTvShows() async {
+    final url = Uri.parse('$baseUrl/tv/top_rated?language=en-US&page=1');
+    final response = await http.get(url, headers: _headers);
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      final results = data['results'] as List;
+      return results.take(10).map((tv) {
+        return Media(
+          id: tv['id'],
+          title: tv['name'] ?? 'Unknown title',
+          posterPath: tv['poster_path'] ?? '',
+          overview: tv['overview'] ?? 'No overview available.',
+          releaseDate: tv['first_air_date'] ?? '',
+          rating: (tv['vote_average'] ?? 0).toDouble(),
+          type: MediaType.tv,
+        );
+      }).toList();
+    }
+    throw Exception('Failed to load top rated TV shows');
   }
 }

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'media.dart';
+import 'Models/media.dart';
 import 'tmdb_service.dart';
 
 class MediaDetailsPage extends StatefulWidget {

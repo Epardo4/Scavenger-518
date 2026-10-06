@@ -5,6 +5,7 @@ class SearchResult {
   final int? year;
   final String imageUrl;
   final List<int> genreIds;
+  final double rating; // Added rating field
   List<String> genreNames;
 
   SearchResult({
@@ -14,6 +15,7 @@ class SearchResult {
     this.year,
     required this.imageUrl,
     required this.genreIds,
+    required this.rating,
     this.genreNames = const [],
   });
 
@@ -36,6 +38,7 @@ class SearchResult {
     if (json['genre_ids'] != null && json['genre_ids'] is List) {
       parsedGenreIds = List<int>.from(json['genre_ids']);
     }
+    final voteAverage = (json['vote_average'] as num? ?? 0).toDouble();
 
     return SearchResult(
       id: json['id'] ?? 0,
@@ -44,6 +47,7 @@ class SearchResult {
       year: parsedYear,
       imageUrl: fullImageUrl,
       genreIds: parsedGenreIds,
+      rating: voteAverage,
     );
   }
 }
