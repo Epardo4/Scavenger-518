@@ -4,6 +4,7 @@ import 'tmdb_service.dart';
 import 'Models/media.dart';
 import 'media_details_page.dart';
 import 'search_screen.dart';
+import 'profile_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -15,6 +16,8 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final TmdbService _tmdbService = TmdbService();
   final TextEditingController _homeSearchController = TextEditingController();
+
+  int currentPage = 0;
 
   List<Media> _topMovies = [];
   List<Media> _topTvShows = [];
@@ -246,6 +249,21 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
       ),
+      
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: currentPage,
+        onTap: (value) {
+          setState(() {currentPage = value;});
+          if(currentPage == 1){
+            Navigator.push(
+              context,MaterialPageRoute(builder: (context) => const ProfilePage())
+          );}
+        },
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home),label: "Home"),
+          BottomNavigationBarItem(icon: Icon(Icons.person),label: "Profile")
+        ]
+        ),
     );
   }
 

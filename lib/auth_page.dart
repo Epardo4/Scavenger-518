@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AuthPage extends StatefulWidget{
     const AuthPage({super.key});
@@ -16,8 +17,13 @@ class _AuthPageState extends State<AuthPage>{
 
     //user input
     final emailController = TextEditingController();
+    final firstNameController = TextEditingController();
+    final lastNameController = TextEditingController();
+    final userNameController = TextEditingController();
     final passwordController = TextEditingController();
     final confirmPasswordController = TextEditingController();
+
+    final db = FirebaseFirestore.instance;
 
     Future<void> resetPassword() async{
       final email = emailController.text.trim();
@@ -56,75 +62,118 @@ class _AuthPageState extends State<AuthPage>{
     }
 
     //handles login/sign up
-    Future<void> submit() async {
-      if (isLoading) return;
+    Future<void> submit() async{
+      if(isLoading) return;
 
-      final email = emailController.text.trim();
-      final password = passwordController.text.trim();
-      final confirmPassword = confirmPasswordController.text.trim();
-
-      if (email.isEmpty) {
+      if(emailController.text.trim().isEmpty){
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please enter your email address.')),
+          const SnackBar(
+            content: Text('Please enter your email address.')
+          )
         );
         return;
       }
 
-      if (password.isEmpty) {
+      if(passwordController.text.trim().isEmpty){
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please enter your password.')),
+          const SnackBar(content: Text('Please enter your password.'))
         );
         return;
       }
 
-      if (!isLogin) {
-        if (password.length < 6) {
+      if(!isLogin){
+        if(passwordController.text.length < 6){
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Password must be at least 6 characters.')),
+            const SnackBar(content: Text('Password must be at least 6 characters.'))
           );
-          return; // Fix: Only return if password is less than 6 chars
-        }
-
-        if (password != confirmPassword) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Passwords do not match.')),
-          );
-          return; // Fix: Only return if passwords don't match
+          return;
         }
       }
 
-      try {
-        setState(() { isLoading = true; });
+      if(!isLogin && passwordController.text != confirmPasswordController.text){
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Passwords do not match.'))
+        );
+        return;
+      }
 
-        if (isLogin) {
+      if(!isLogin){
+        if(userNameController.text.trim().isEmpty){
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please enter a username.'))
+          );
+          return;
+        }
+        if(firstNameController.text.trim().isEmpty){
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please enter your first name.'))
+          );
+          return;
+        }
+        if(lastNameController.text.trim().isEmpty){
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please enter your last name.'))
+          );
+          return;
+        }
+      }
+
+      try{
+        setState(() {isLoading = true;});
+        if(isLogin){
           await FirebaseAuth.instance.signInWithEmailAndPassword(
-            email: email,
-            password: password,
-          );
-        } else {
-          await FirebaseAuth.instance.createUserWithEmailAndPassword(
-            email: email,
-            password: password,
+            email: emailController.text.trim(),
+            password: passwordController.text.trim()
           );
         }
+        else{
+          await FirebaseAuth.instance.createUserWithEmailAndPassword(
+            email: emailController.text.trim(),
+            password: passwordController.text.trim()
+          );
 
-        if (!mounted) return;
+          try{final user = <String, dynamic>{
+            "email": emailController.text.trim(),
+            "first": firstNameController.text.trim(),
+            "last": lastNameController.text.trim(),
+            "username": userNameController.text.trim()
+          };
+
+          db.collection("Users").add(user).then((DocumentReference doc) => print('DocumentSnapshot added wih ID: ${doc.id}'));
+        }catch(e, stackTrace){
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$stackTrace')));
+          print('$stackTrace');
+        }
+      }
+        // // Create a new user with a first and last name
+      //     try{final user = <String, dynamic>{
+      //       "first": "Ada",
+      //       "last": "Lovelace",
+      //       "born": 1815
+      //     };
+
+      //     // Add a new document with a generated ID
+      //     db.collection("Users").add(user).then((DocumentReference doc) =>
+      //         print('DocumentSnapshot added with ID: ${doc.id}'));
+            
+      //     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Added user')));
+      //     }catch(e, stackTrace){ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$stackTrace')));}
+
+        if(!mounted) return;
 
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              isLogin ? 'Successfully logged in!' : 'Account Created Successfully',
-            ),
-          ),
+          SnackBar(content: Text(
+            isLogin ? 'Successfully logged in!' : 'Account Created Successfully',
+          ))
         );
-      } on FirebaseAuthException catch (e) {
-        if (!mounted) return;
+      } on FirebaseException catch(e){
+        if(!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message ?? e.code)),
+          SnackBar(content: Text(e.code))
         );
-      } finally {
-        if (mounted) {
-          setState(() { isLoading = false; });
+      }finally{
+        if(mounted){
+          setState(() {isLoading = false;});
         }
       }
     }
@@ -134,6 +183,9 @@ class _AuthPageState extends State<AuthPage>{
       emailController.dispose();
       passwordController.dispose();
       confirmPasswordController.dispose();
+      firstNameController.dispose();
+      lastNameController.dispose();
+      userNameController.dispose();
       super.dispose();
     }
 
@@ -216,7 +268,34 @@ class _AuthPageState extends State<AuthPage>{
                           }
                         )
                       )
-                    )
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    TextField(
+                      controller: userNameController,
+                      decoration: InputDecoration(
+                        labelText: 'User Name',
+                        border: OutlineInputBorder())
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    TextField(
+                      controller: firstNameController,
+                      decoration: InputDecoration(
+                        labelText: 'First Name',
+                        border: OutlineInputBorder())
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      TextField(
+                        controller: lastNameController,
+                        decoration: InputDecoration(
+                          labelText: 'Last Name',
+                          border: OutlineInputBorder())
+                        )
                   ],
 
                   const SizedBox(height: 24),
