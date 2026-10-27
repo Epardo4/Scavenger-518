@@ -1,0 +1,91 @@
+import 'package:flutter/material.dart';
+ 
+import 'ratings.dart';
+
+class starRating extends StatelessWidget {
+    final int rating;
+    final ValueChanged<int> onChanged;
+    final double size;
+
+    const starRating({
+        super.key, 
+        required this.rating, 
+        required this.onChanged, 
+        this.size = 32});
+
+    @override
+    Widget build(BuildContext context) {
+        return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: List.generate(5, (i) {
+                final star = i + 1;
+                return GestureDetector(
+                    onTap: () => onChanged(star == rating ? 0 : star),
+                    child: Icon(
+                        star <= rating ? Icons.star : Icons.star_border,
+                        color: Colors.amber,
+                        size: size,
+                    ),
+                );
+            }),
+        );
+    }
+
+}
+
+class movieRating extends StatefulWidget {
+    final int movieId;
+    const movieRating({super.key, required this.movieId});
+
+    @override
+    State<movieRating> createState() => _movieRatingState();
+}
+
+class _movieRatingState extends State<movieRating> {
+    final RatingService _ratingService = RatingService();
+    late int Stream<int> _stream;
+
+    @override
+    void initState() {
+        super.initState();
+        _stream = _ratingService.movieRating(widget.movieId);
+    }
+
+    @override
+    void initState() {
+        super.initState();
+        _stream = _ratingService.movieRating(widget.movieId);
+    }
+
+    @override
+    Widget build(BuildContext context) {
+        return StreamBuilder<int>(
+            stream: _stream,
+            builder: (context, snapshot) {
+                final rating = snapshot.data ?? 0;
+
+                return Row(
+                    children: [
+                        StarRating(
+                            rating: rating,
+                            onChanged: (stars) async {
+                                try {
+                                    await _ratingService.movieRating(widget.movieId, stars);
+                                } catch (_) {
+                                    if (!context.mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Error rating movie'))
+                                    );
+                                },
+                            },
+                        ),
+                        const SizedBox(width: 12),
+                        Text(rating == 0 ? 'Tap to rate' : '$rating / 5 stars'),
+                    ],
+                );
+            },
+        );
+    }
+}
+
+

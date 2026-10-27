@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 import 'Models/media.dart';
 import 'tmdb_service.dart';
+import 'episodes.dart';
+import 'ratings.dart';
+import 'streaming_services.dart';
 
 class MediaDetailsPage extends StatefulWidget {
   final int mediaId;
@@ -117,6 +120,9 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
             .toList() ??
         [];
     final cast = (media['credits']?['cast'] as List?)?.take(10).toList() ?? [];
+    final streamingServices = media['watch/providers'] as Map<String, dynamic>?;
+    final seasons = (media['seasons'] as List?) ?? [];
+
 
     return SingleChildScrollView(
       child: Column(
