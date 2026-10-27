@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'episode_details_page.dart';
 import 'Models/media.dart';
 import 'tmdb_service.dart';
+import 'actor_details_page.dart';
 //import 'episodes.dart';
 import 'ratings.dart';
 //import 'streaming_services.dart';
@@ -722,6 +723,7 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
 
     return Column(
       children: cast.map((person) {
+        final personId = person['id'];
         final name = person['name'] ?? 'Unknown';
         final character = person['character'] ?? '';
         final profilePath = person['profile_path'] as String?;
@@ -731,6 +733,16 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
           leading: _buildProfileImage(profilePath),
           title: Text(name),
           subtitle: character.isEmpty ? null : Text(character),
+          onTap: personId != null
+              ? () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ActorDetailsPage(personId: personId),
+                    ),
+                  );
+                }
+              : null,
         );
       }).toList(),
     );

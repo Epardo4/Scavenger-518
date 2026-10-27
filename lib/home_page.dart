@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // <-- Added Firestore import
 import 'tmdb_service.dart';
 import 'Models/media.dart';
 import 'media_details_page.dart';
@@ -358,34 +359,10 @@ class _HomePageState extends State<HomePage> {
                       Positioned(
                         bottom: 6,
                         right: 6,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.black87,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.star,
-                                color: Colors.amber,
-                                size: 12,
-                              ),
-                              const SizedBox(width: 3),
-                              Text(
-                                media.rating.toStringAsFixed(1),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
+                        child: FirebaseRatingBadge(
+                          mediaId: media.id,
+                          mediaType: media.type == MediaType.movie ? 'movie' : 'tv',
+                          tmdbRating: media.rating,
                         ),
                       ),
                     ],
@@ -415,6 +392,69 @@ class _HomePageState extends State<HomePage> {
       width: 130,
       color: Colors.grey[300],
       child: const Icon(Icons.movie, size: 40, color: Colors.grey),
+    );
+  }
+}
+
+/// Reusable widget to load and display Firebase rating with fallback to TMDB
+class FirebaseRatingBadge extends StatelessWidget {
+  final int mediaId;
+  final String mediaType; // 'movie' or 'tv'
+  final double tmdbRating;
+
+  const FirebaseRatingBadge({
+    super.key,
+    required this.mediaId,
+    required this.mediaType,
+    required this.tmdbRating,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final docId = '${mediaType.toLowerCase()}_$mediaId';
+
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance.collection('MediaRatings').doc(docId).get(),
+      builder: (context, snapshot) {
+        double displayRating = tmdbRating;
+
+        if (snapshot.hasData && snapshot.data!.exists) {
+          final data = snapshot.data!.data() as Map<String, dynamic>?;
+          if (data != null && data.containsKey('averageRating')) {
+            displayRating = (data['averageRating'] as num).toDouble();
+          }
+        }
+
+        return Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 6,
+            vertical: 2,
+          ),
+          decoration: BoxDecoration(
+            color: Colors.black87,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.star,
+                color: Colors.amber,
+                size: 12,
+              ),
+              const SizedBox(width: 3),
+              Text(
+                displayRating.toStringAsFixed(1),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

@@ -270,5 +270,19 @@ class TmdbService {
     throw Exception('Failed to load top rated TV shows');
   }
 
+  Future<Map<String, dynamic>> getPersonDetails(int personId) async {
+    final url = Uri.parse(
+      '$baseUrl/person/$personId?language=en-US'
+      '&append_to_response=combined_credits',
+    );
+
+    final response = await http.get(url, headers: _headers);
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+
+    throw Exception('Failed to load person details: ${response.statusCode}');
+  }
 
 }

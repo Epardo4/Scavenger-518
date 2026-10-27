@@ -6,7 +6,6 @@ import 'firebase_options.dart';
 import 'auth_page.dart';
 import 'home_page.dart';
 
-// Global theme notifier accessible across pages
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.light);
 
 void main() async {
