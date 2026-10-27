@@ -4,9 +4,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'Models/media.dart';
 import 'tmdb_service.dart';
-import 'episodes.dart';
+//import 'episodes.dart';
 import 'ratings.dart';
-import 'streaming_services.dart';
+//import 'streaming_services.dart';
 
 class MediaDetailsPage extends StatefulWidget {
   final int mediaId;

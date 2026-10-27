@@ -5,6 +5,7 @@ import 'Models/media.dart';
 import 'media_details_page.dart';
 import 'search_screen.dart';
 import 'profile_page.dart';
+import 'main.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -106,6 +107,20 @@ class _HomePageState extends State<HomePage> {
       appBar: AppBar(
         title: const Text('Scavenger'),
         actions: [
+          ValueListenableBuilder<ThemeMode>(
+            valueListenable: themeNotifier,
+            builder: (context, mode, child) {
+              return IconButton(
+                icon: Icon(mode == ThemeMode.dark ? Icons.light_mode : Icons.dark_mode),
+                tooltip: 'Toggle Theme',
+                onPressed: () {
+                  themeNotifier.value = mode == ThemeMode.dark
+                      ? ThemeMode.light
+                      : ThemeMode.dark;
+                },
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.search),
             tooltip: 'Search',
