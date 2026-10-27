@@ -46,7 +46,7 @@ class TmdbService {
   Future<Map<String, dynamic>> getMovieDetails(int movieId) async {
     final url = Uri.parse(
       '$baseUrl/movie/$movieId?language=en-US'
-      '&append_to_response=credits',
+      '&append_to_response=credits,watch/providers', // <-- Added watch/providers
     );
 
     final response = await http.get(
@@ -67,7 +67,7 @@ class TmdbService {
   Future<Map<String, dynamic>> getTvDetails(int tvId) async {
     final url = Uri.parse(
       '$baseUrl/tv/$tvId?language=en-US'
-      '&append_to_response=credits',
+      '&append_to_response=credits,watch/providers', // <-- Added watch/providers
     );
 
     final response = await http.get(
@@ -83,6 +83,20 @@ class TmdbService {
     }
 
     throw Exception('Failed to load TV show details: ${response.statusCode}');
+  }
+
+  Future<Map<String, dynamic>> getSeasonDetails(int tvId, int seasonNumber) async {
+    final url = Uri.parse(
+      '$baseUrl/tv/$tvId/season/$seasonNumber?language=en-US',
+    );
+
+    final response = await http.get(url, headers: _headers);
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+
+    throw Exception('Failed to load season details: ${response.statusCode}');
   }
 
   Future<List<SearchResult>> searchTitles(
@@ -255,4 +269,6 @@ class TmdbService {
     }
     throw Exception('Failed to load top rated TV shows');
   }
+
+
 }

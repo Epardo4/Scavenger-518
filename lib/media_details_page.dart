@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-
+import 'episode_details_page.dart';
 import 'Models/media.dart';
 import 'tmdb_service.dart';
 //import 'episodes.dart';
@@ -36,6 +36,10 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
 
   bool get _isMovie => widget.mediaType == MediaType.movie;
 
+  int _selectedSeasonNumber = 1;
+  List<dynamic> _seasonEpisodes = [];
+  bool _isLoadingEpisodes = false;
+
   @override
   void initState() {
     super.initState();
@@ -54,7 +58,20 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
       setState(() {
         _media = data;
         _isLoading = false;
+        final seasons = data['seasons'] as List<dynamic>? ?? [];
+        
+        // Find the first valid season greater than 0 (skipping Specials/Season 0)
+        final validSeason = seasons.firstWhere(
+          (s) => (s['season_number'] as int? ?? 0) > 0,
+          orElse: () => seasons.isNotEmpty ? seasons.first : {'season_number': 1},
+        );
+        
+        _selectedSeasonNumber = validSeason['season_number'] ?? 1;
       });
+
+      if (!_isMovie) {
+        _loadSeasonEpisodes(_selectedSeasonNumber);
+      }
     } catch (e) {
       if (!mounted) return;
 
@@ -64,6 +81,26 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
       });
     }
   }
+
+  Future<void> _loadSeasonEpisodes(int seasonNumber) async {
+  setState(() {
+    _isLoadingEpisodes = true;
+  });
+  try {
+    final seasonData = await _tmdbService.getSeasonDetails(widget.mediaId, seasonNumber);
+    if (!mounted) return;
+    setState(() {
+      _seasonEpisodes = seasonData['episodes'] as List<dynamic>? ?? [];
+      _isLoadingEpisodes = false;
+    });
+  } catch (_) {
+    if (!mounted) return;
+    setState(() {
+      _seasonEpisodes = [];
+      _isLoadingEpisodes = false;
+    });
+  }
+}
 
   Future<void> _loadFirebaseRating() async {
     try {
@@ -365,9 +402,6 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
             .toList() ??
         [];
     final cast = (media['credits']?['cast'] as List?)?.take(10).toList() ?? [];
-    final streamingServices = media['watch/providers'] as Map<String, dynamic>?;
-    final seasons = (media['seasons'] as List?) ?? [];
-
 
     return SingleChildScrollView(
       child: Column(
@@ -398,6 +432,16 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
                 const SizedBox(height: 20),
                 _buildSection(title: 'Genres', child: _buildGenres(genres)),
                 const SizedBox(height: 20),
+                
+                // Streaming Services Section
+                _buildStreamingSection(),
+                const SizedBox(height: 20),
+
+                if (!_isMovie) ...[
+                _buildEpisodesSection(),
+                const SizedBox(height: 20),
+                ],
+
                 _buildSection(title: 'Cast', child: _buildCast(cast)),
                 const SizedBox(height: 25),
                 _buildWatchlistButton(),
@@ -409,6 +453,119 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
       ),
     );
   }
+
+    Widget _buildEpisodesSection() {
+    final seasons = (_media?['seasons'] as List<dynamic>? ?? [])
+        .where((s) => (s['season_number'] as int? ?? 0) > 0)
+        .toList();
+    if (seasons.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Episodes',
+              style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
+            ),
+            DropdownButton<int>(
+              value: _selectedSeasonNumber,
+              items: seasons.map<DropdownMenuItem<int>>((season) {
+                final seasonNum = season['season_number'] as int;
+                final seasonName = season['name'] as String? ?? 'Season $seasonNum';
+                return DropdownMenuItem<int>(
+                  value: seasonNum,
+                  child: Text(seasonName),
+                );
+              }).toList(),
+              onChanged: (val) {
+                if (val != null) {
+                  setState(() {
+                    _selectedSeasonNumber = val;
+                  });
+                  _loadSeasonEpisodes(val);
+                }
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        _isLoadingEpisodes
+            ? const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
+            : _seasonEpisodes.isEmpty
+                ? const Text('No episodes available for this season.')
+                : ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _seasonEpisodes.length,
+                    itemBuilder: (context, index) {
+                      final ep = _seasonEpisodes[index];
+                      final epNum = ep['episode_number'] ?? (index + 1);
+                      final epName = ep['name'] ?? 'Episode $epNum';
+                      final overview = ep['overview'] ?? '';
+                      final stillPath = ep['still_path'] as String?;
+                      final stillUrl = stillPath != null && stillPath.isNotEmpty
+                          ? 'https://image.tmdb.org/t/p/w185$stillPath'
+                          : '';
+
+                      return Card(
+                        elevation: 1,
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.all(8),
+                          leading: ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: SizedBox(
+                              width: 90,
+                              height: 55,
+                              child: stillUrl.isNotEmpty
+                                  ? Image.network(
+                                      stillUrl,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => _episodePlaceholder(),
+                                    )
+                                  : _episodePlaceholder(),
+                            ),
+                          ),
+                          title: Text(
+                            '$epNum. $epName',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
+                          subtitle: Text(
+                            overview,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                          ),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => EpisodeDetailsPage(
+                                  tvId: widget.mediaId,
+                                  seasonNumber: _selectedSeasonNumber,
+                                  episodeNumber: epNum,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    },
+                  ),
+      ],
+    );
+  }
+
+  Widget _episodePlaceholder() {
+    return Container(
+      color: Colors.grey[300],
+      child: const Icon(Icons.tv, size: 24, color: Colors.grey),
+    );
+  }
+
 
   Widget _buildBackdrop(String? backdropPath) {
     if (backdropPath == null || backdropPath.isEmpty) {
@@ -642,6 +799,85 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
       ),
     );
   }
+
+  Widget _buildStreamingSection() {
+    final watchProviders = _media?['watch/providers'] as Map<String, dynamic>?;
+    if (watchProviders == null) return const SizedBox.shrink();
+
+    final results = watchProviders['results'] as Map<String, dynamic>?;
+    if (results == null) return const SizedBox.shrink();
+
+    // Default to US region data, or fallback to the first available region
+    final regionData = results['US'] as Map<String, dynamic>? ?? 
+                       (results.isNotEmpty ? results.values.first as Map<String, dynamic>? : null);
+    if (regionData == null) return const SizedBox.shrink();
+
+    final flatrate = regionData['flatrate'] as List<dynamic>? ?? [];
+    final rent = regionData['rent'] as List<dynamic>? ?? [];
+    final buy = regionData['buy'] as List<dynamic>? ?? [];
+
+    if (flatrate.isEmpty && rent.isEmpty && buy.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Where to Watch',
+          style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 12),
+        if (flatrate.isNotEmpty) ...[
+          const Text('Streaming', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey)),
+          const SizedBox(height: 6),
+          _buildProviderChips(flatrate),
+          const SizedBox(height: 12),
+        ],
+        if (rent.isNotEmpty) ...[
+          const Text('Rent', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey)),
+          const SizedBox(height: 6),
+          _buildProviderChips(rent),
+          const SizedBox(height: 12),
+        ],
+        if (buy.isNotEmpty) ...[
+          const Text('Buy', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey)),
+          const SizedBox(height: 6),
+          _buildProviderChips(buy),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildProviderChips(List<dynamic> providers) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: providers.map((provider) {
+        final name = provider['provider_name'] ?? '';
+        final logoPath = provider['logo_path'] as String?;
+        final logoUrl = logoPath != null ? 'https://image.tmdb.org/t/p/w92$logoPath' : '';
+
+        return Chip(
+          avatar: logoUrl.isNotEmpty
+              ? ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: Image.network(
+                    logoUrl,
+                    width: 24,
+                    height: 24,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.tv, size: 16),
+                  ),
+                )
+              : const Icon(Icons.tv, size: 16),
+          label: Text(name),
+        );
+      }).toList(),
+    );
+  }
+
+
 }
 
 class _InfoChip extends StatelessWidget {
