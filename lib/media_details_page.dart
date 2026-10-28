@@ -5,9 +5,6 @@ import 'episode_details_page.dart';
 import 'Models/media.dart';
 import 'tmdb_service.dart';
 import 'actor_details_page.dart';
-//import 'episodes.dart';
-import 'ratings.dart';
-//import 'streaming_services.dart';
 
 class MediaDetailsPage extends StatefulWidget {
   final int mediaId;

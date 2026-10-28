@@ -105,35 +105,6 @@ class _HomePageState extends State<HomePage> {
     final user = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Scavenger'),
-        actions: [
-          ValueListenableBuilder<ThemeMode>(
-            valueListenable: themeNotifier,
-            builder: (context, mode, child) {
-              return IconButton(
-                icon: Icon(mode == ThemeMode.dark ? Icons.light_mode : Icons.dark_mode),
-                tooltip: 'Toggle Theme',
-                onPressed: () {
-                  themeNotifier.value = mode == ThemeMode.dark
-                      ? ThemeMode.light
-                      : ThemeMode.dark;
-                },
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.search),
-            tooltip: 'Search',
-            onPressed: () => _navigateToSearch(context),
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Log Out',
-            onPressed: logOut,
-          ),
-        ],
-      ),
       body: RefreshIndicator(
         onRefresh: _loadTopRatedContent,
         child: SingleChildScrollView(
@@ -265,21 +236,6 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
       ),
-      
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: currentPage,
-        onTap: (value) {
-          setState(() {currentPage = value;});
-          if(currentPage == 1){
-            Navigator.push(
-              context,MaterialPageRoute(builder: (context) => const ProfilePage())
-          );}
-        },
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home),label: "Home"),
-          BottomNavigationBarItem(icon: Icon(Icons.person),label: "Profile")
-        ]
-        ),
     );
   }
 

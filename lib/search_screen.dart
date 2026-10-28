@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // <-- Added Firestore import
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'tmdb_service.dart';
 import 'Models/search_result.dart';
 import 'media_details_page.dart';
@@ -357,7 +357,6 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 }
 
-/// Reusable widget to load and display Firebase rating with fallback to TMDB
 class FirebaseRatingBadge extends StatelessWidget {
   final int mediaId;
   final String mediaType; // 'movie' or 'tv'

@@ -20,9 +20,6 @@ class _ProfilePageState extends State<ProfilePage> {
     final user = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Rated Movies & TV Shows'),
-      ),
       body: user == null
           ? const Center(child: Text('Not logged in'))
           : StreamBuilder<QuerySnapshot>(
@@ -170,24 +167,6 @@ class _ProfilePageState extends State<ProfilePage> {
                 );
               },
             ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: currentPage,
-        onTap: (value) {
-          setState(() {
-            currentPage = value;
-          });
-          if (currentPage == 0) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => const HomePage()),
-            );
-          }
-        },
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: "Profile"),
-        ],
-      ),
     );
   }
 
