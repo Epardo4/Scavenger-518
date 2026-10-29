@@ -53,6 +53,12 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
       });
     }
   }
+  //making the addmedia button work
+  Future<void> addMedia() async{
+    if(_isLoading) return;
+
+
+  }
 
   void _retry() {
     setState(() {
@@ -66,7 +72,7 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isMovie ? 'Movie Details' : 'TV Show Details'),
+        title: Text(_isMovie ? 'Movie Details' : 'TV Show Details'), //
       ),
       body: _buildBody(),
     );
@@ -338,6 +344,7 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
       height: 50,
       child: ElevatedButton.icon(
         onPressed: () {
+
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Watchlist functionality coming soon!'),

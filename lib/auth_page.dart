@@ -120,6 +120,7 @@ class _AuthPageState extends State<AuthPage>{
 
       try{
         setState(() {isLoading = true;});
+        UserCredential userCredential;
         if(isLogin){
           await FirebaseAuth.instance.signInWithEmailAndPassword(
             email: emailController.text.trim(),
@@ -127,7 +128,7 @@ class _AuthPageState extends State<AuthPage>{
           );
         }
         else{
-          await FirebaseAuth.instance.createUserWithEmailAndPassword(
+          userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
             email: emailController.text.trim(),
             password: passwordController.text.trim()
           );
@@ -139,25 +140,14 @@ class _AuthPageState extends State<AuthPage>{
             "username": userNameController.text.trim()
           };
 
-          db.collection("Users").add(user).then((DocumentReference doc) => print('DocumentSnapshot added wih ID: ${doc.id}'));
+          String? uid = userCredential.user?.uid;
+
+          db.collection("Users").doc(uid).set(user);
         }catch(e, stackTrace){
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$stackTrace')));
           print('$stackTrace');
         }
       }
-        // // Create a new user with a first and last name
-      //     try{final user = <String, dynamic>{
-      //       "first": "Ada",
-      //       "last": "Lovelace",
-      //       "born": 1815
-      //     };
-
-      //     // Add a new document with a generated ID
-      //     db.collection("Users").add(user).then((DocumentReference doc) =>
-      //         print('DocumentSnapshot added with ID: ${doc.id}'));
-            
-      //     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Added user')));
-      //     }catch(e, stackTrace){ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$stackTrace')));}
 
         if(!mounted) return;
 
