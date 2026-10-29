@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'tmdb_service.dart';
 import 'Models/search_result.dart';
 import 'media_details_page.dart';
@@ -276,7 +277,7 @@ class _SearchScreenState extends State<SearchScreen> {
       padding: const EdgeInsets.all(16),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: (screenWidth/120).floor(),
-        childAspectRatio: 0.52,  //0.52
+        childAspectRatio: 0.52,
         crossAxisSpacing: 12,
         mainAxisSpacing: 16,
       ),
@@ -320,34 +321,10 @@ class _SearchScreenState extends State<SearchScreen> {
                     Positioned(
                       bottom: 6,
                       right: 6,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black87,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.star,
-                              color: Colors.amber,
-                              size: 12,
-                            ),
-                            const SizedBox(width: 3),
-                            Text(
-                              result.rating.toStringAsFixed(1),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
+                      child: FirebaseRatingBadge(
+                        mediaId: result.id,
+                        mediaType: result.type.toLowerCase(),
+                        tmdbRating: result.rating,
                       ),
                     ),
                   ],
@@ -376,6 +353,68 @@ class _SearchScreenState extends State<SearchScreen> {
       child: const Center(
         child: Icon(Icons.movie, size: 40, color: Colors.grey),
       ),
+    );
+  }
+}
+
+class FirebaseRatingBadge extends StatelessWidget {
+  final int mediaId;
+  final String mediaType; // 'movie' or 'tv'
+  final double tmdbRating;
+
+  const FirebaseRatingBadge({
+    super.key,
+    required this.mediaId,
+    required this.mediaType,
+    required this.tmdbRating,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final docId = '${mediaType.toLowerCase()}_$mediaId';
+
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance.collection('MediaRatings').doc(docId).get(),
+      builder: (context, snapshot) {
+        double displayRating = tmdbRating;
+
+        if (snapshot.hasData && snapshot.data!.exists) {
+          final data = snapshot.data!.data() as Map<String, dynamic>?;
+          if (data != null && data.containsKey('averageRating')) {
+            displayRating = (data['averageRating'] as num).toDouble();
+          }
+        }
+
+        return Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 6,
+            vertical: 2,
+          ),
+          decoration: BoxDecoration(
+            color: Colors.black87,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.star,
+                color: Colors.amber,
+                size: 12,
+              ),
+              const SizedBox(width: 3),
+              Text(
+                displayRating.toStringAsFixed(1),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

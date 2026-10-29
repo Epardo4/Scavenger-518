@@ -137,7 +137,8 @@ class _AuthPageState extends State<AuthPage>{
             "email": emailController.text.trim(),
             "first": firstNameController.text.trim(),
             "last": lastNameController.text.trim(),
-            "username": userNameController.text.trim()
+            "username": userNameController.text.trim(),
+            "themeMode": "light"
           };
 
           String? uid = userCredential.user?.uid;
