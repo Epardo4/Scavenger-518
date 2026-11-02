@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -15,46 +14,105 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   int currentPage = 1;
+  bool showRated = true;
 
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
 
-    // Make sure a user is logged in.
-    if (user == null) {
-      return null;
-    }
-
-    try {
-      final DocumentSnapshot<Map<String, dynamic>> userDoc =
-          await FirebaseFirestore.instance
-              .collection('Users')
-              .doc(user.uid)
-              .get();
-
-      if (userDoc.exists) {
-        return userDoc.data();
-      }
-
-      return null;
-    } catch (e, stackTrace) {
-      debugPrint('Error getting user data: $e');
-      debugPrintStack(stackTrace: stackTrace);
-      rethrow;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
     return Scaffold(
       body: user == null
           ? const Center(child: Text('Not logged in'))
-          : StreamBuilder<QuerySnapshot>(
+          : Column(
+            children: [
+              StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                stream: FirebaseFirestore.instance.collection('Users')
+                  .doc(user.uid).snapshots(),
+                builder: (context, snapshot){
+                  final profile = snapshot.data?.data() ?? {};
+                  final firstName = profile['first'] as String? ?? '';
+                  final lastName = profile['last'] as String ?;
+                  final username = profile['username'] as String ?;
+
+                  final fullName = '$firstName $lastName'.trim();
+
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(20,24,20,20),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 35,
+                          backgroundColor: Colors.blue.shade100,
+                          child: Icon(
+                            Icons.person,
+                            size: 40,
+                            color: Colors.blue.shade800
+                          )
+                        ),
+
+                        const SizedBox(width: 16),
+
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                fullName.isNotEmpty ? fullName : 'Your Name',
+                                style: const TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold
+                                )
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '@$username',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  color: Colors.grey.shade600
+                                )
+                              )
+                            ]
+                          )
+                        )
+                      ]
+                    )
+                  );
+                }
+              ),
+
+              const Divider(height: 1),
+
+              const SizedBox(height: 16),
+              ToggleButtons(
+                isSelected: [showRated, !showRated],
+                onPressed: (index) {
+                  setState(() {
+                    showRated = index == 0;
+                  });
+                },
+                borderRadius: BorderRadius.circular(10),
+                selectedColor: Colors.white,
+                fillColor: Colors.blue,
+                color: Colors.white,
+                constraints: const BoxConstraints(
+                  minHeight: 42,
+                  minWidth: 120
+                ),
+                children: const [
+                  Text('Watched'),
+                  Text('To-Watch')
+                ]
+              ),
+
+              const SizedBox(height: 16),
+                  
+              Expanded(
+                child:  StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('Users')
                   .doc(user.uid)
-                  .collection('Ratings')
-                  .orderBy('timestamp', descending: true)
+                  .collection(showRated ? 'Ratings' : 'Watchlist')
+                  .orderBy(showRated ? 'timestamp' : 'addedAt', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -62,12 +120,20 @@ class _ProfilePageState extends State<ProfilePage> {
                 }
 
                 if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return const Center(
+                  return
+                  showRated ?
+                  const Center(
                     child: Text(
                       'You haven\'t rated any titles yet!',
                       style: TextStyle(fontSize: 16, color: Colors.grey),
                     ),
+                  ) :
+                  const Center(
+                    child: Text(
+                      'You haven\'t added any titles to your to-watch list yet!'
+                    )
                   );
+
                 }
 
                 final docs = snapshot.data!.docs;
@@ -81,7 +147,8 @@ class _ProfilePageState extends State<ProfilePage> {
                     final mediaTypeStr = data['mediaType'] as String;
                     final title = data['title'] as String? ?? 'Unknown Title';
                     final posterPath = data['posterPath'] as String? ?? '';
-                    final userRating = (data['rating'] as num?)?.toDouble() ?? 0.0;
+                    final userRating = 
+                    showRated ? (data['rating'] as num?)?.toDouble() ?? 0.0 : -1;
 
                     final mediaType = mediaTypeStr == 'tv' ? MediaType.tv : MediaType.movie;
                     final posterUrl = posterPath.isNotEmpty
@@ -168,6 +235,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                       ],
                                     ),
                                     const SizedBox(height: 8),
+                                    showRated ?
                                     Row(
                                       children: [
                                         const Icon(Icons.star, color: Colors.amber, size: 18),
@@ -180,7 +248,11 @@ class _ProfilePageState extends State<ProfilePage> {
                                           ),
                                         ),
                                       ],
-                                    ),
+                                    ) : Row(
+                                      children: [
+                                        const SizedBox(width: 30)
+                                      ]
+                                    )
                                   ],
                                 ),
                               ),
@@ -192,9 +264,11 @@ class _ProfilePageState extends State<ProfilePage> {
                     );
                   },
                 );
-              },
-            ),
-    );
+                },
+              ),
+            )
+              ])
+          );
   }
 
   Widget _posterPlaceholder() {
@@ -203,36 +277,6 @@ class _ProfilePageState extends State<ProfilePage> {
       child: const Center(
         child: Icon(Icons.movie, size: 30, color: Colors.grey),
       ),
-    );
-  }
-
-  Widget mediaListBuild(BuildContext context){
-    return DefaultTabController(
-      length: 2,
-      child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-            ),
-                    TabBar(
-                      labelColor: Colors.blue,
-                      unselectedLabelColor: Colors.grey,
-                      tabs: [
-                        Tab(text: 'To-Watch List'),
-                        Tab(text: 'Watched List')
-                      ],
-                    ),
-                    Expanded(
-                       child: TabBarView(
-                          children: [
-                            Center(child: Text('View for To-Watch List')),
-                            Center(child: Text('View for Watched List'))
-                          ]
-                        )
-                      )
-          ]
-        )
-
     );
   }
 }

@@ -81,9 +81,54 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
   }
   //making the addmedia button work
   Future<void> addMedia() async{
-    if(_isLoading) return;
+    if(_isLoading || _media == null) return;
+    final user = FirebaseAuth.instance.currentUser;
+    if(user == null){
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Please log in to add titles to your watchlist.')
+      ));
+      return;
+    }
 
+    final title = _isMovie ? _media!['title'] ?? 'Unknown Title' : _media!['title'] ?? 'Unknown Title';
 
+    final docId = '${widget.mediaType.name}_${widget.mediaId}';
+    final watchListRef = FirebaseFirestore.instance.collection('Users').doc(user.uid).collection('Watchlist').doc(docId);
+    try{
+      final existingDoc = await watchListRef.get();
+      
+      if(existingDoc.exists){
+        if(!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This title is already in you watchlist.'))
+        );
+        return;
+      }
+
+      String? posterPath;
+        if (_media != null) {
+          posterPath = _media!['poster_path'] as String?;
+        }
+
+      await watchListRef.set({
+        'mediaId': widget.mediaId,
+        'mediaType': widget.mediaType.name,
+        'title': title,
+        'posterPath': posterPath,
+        'addedAt': FieldValue.serverTimestamp()
+      });
+
+      if(!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Added to your watchlist!')
+      ));
+    }catch(_){
+      if(!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Failed to add to watchlist')
+      ));
+    }
   }
 
   Future<void> _loadSeasonEpisodes(int seasonNumber) async {
@@ -162,11 +207,12 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
         .doc(user.uid)
         .collection('Ratings')
         .doc(docId);
-
     try {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Submitting rating...')),
       );
+
+      await FirebaseFirestore.instance.collection('Users').doc(user.uid).collection('Watchlist').doc(docId).delete();
 
       await FirebaseFirestore.instance.runTransaction((transaction) async {
         final mediaSnapshot = await transaction.get(mediaRatingRef);
@@ -798,18 +844,16 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
   }
 
   Widget _buildWatchlistButton() {
-    return SizedBox(
+    //trying to get this to work
+    // final docId = '${widget.mediaType.name}_${widget.mediaId}';
+    // var inWatchList = FirebaseFirestore.instance.collection('Users').doc('user.uid')
+    //   .collection('Watchlist').where('mediaId', isEqualTo: docId.replaceAll(RegExp(r'[^0-9]'), '')).get();
+    return 
+    SizedBox(
       width: double.infinity,
       height: 50,
       child: ElevatedButton.icon(
-        onPressed: () {
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Watchlist functionality coming soon!'),
-            ),
-          );
-        },
+        onPressed: _isLoading ? null : addMedia,
         icon: const Icon(Icons.bookmark_add_outlined),
         label: const Text('Add to Watchlist', style: TextStyle(fontSize: 16)),
       ),
