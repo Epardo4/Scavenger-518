@@ -31,6 +31,7 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
   double? _firebaseAverageRating;
   int _firebaseRatingCount = 0;
   double? _userExistingRating; // Tracks what the current user previously rated it
+  bool onToWatchList = false;
 
   bool get _isMovie => widget.mediaType == MediaType.movie;
 
@@ -43,6 +44,7 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
     super.initState();
     _loadMedia();
     _loadFirebaseRating();
+    getListData();
   }
 
   Future<void> _loadMedia() async {
@@ -95,16 +97,15 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
     final docId = '${widget.mediaType.name}_${widget.mediaId}';
     final watchListRef = FirebaseFirestore.instance.collection('Users').doc(user.uid).collection('Watchlist').doc(docId);
     try{
-      final existingDoc = await watchListRef.get();
-      
-      if(existingDoc.exists){
-        if(!mounted) return;
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('This title is already in you watchlist.'))
-        );
+      if(onToWatchList){
+        watchListRef.delete();
+        setState(() {onToWatchList = false;});
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Removed from your watchlist')
+        ));
         return;
       }
+      setState(() {onToWatchList = true;});
 
       String? posterPath;
         if (_media != null) {
@@ -190,6 +191,111 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
     }
   }
 
+  Future<void> getListData() async{
+    try{
+      final docId = '${widget.mediaType.name}_${widget.mediaId}';
+      final firestore = FirebaseFirestore.instance;
+      final user = FirebaseAuth.instance.currentUser;
+      if(user != null){
+        final userToWatchDoc = await firestore.collection('Users').doc(user.uid).collection('Watchlist').doc(docId).get();
+
+        if(userToWatchDoc.exists && mounted){
+          setState((){
+            onToWatchList = true;
+          });
+        }
+      }
+    } catch(_){
+
+    }
+  }
+
+  Future<void> removeRatingInfo() async{
+    final user = FirebaseAuth.instance.currentUser;
+    if(user == null){
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text(
+        'You must be logged in to handle ratings'
+      )));
+      return;
+    }
+
+    final docId = '${widget.mediaType.name}_${widget.mediaId}';
+    final mediaRatingRef = FirebaseFirestore.instance.collection('MediaRatings').doc(docId);
+    final userRatingRef = FirebaseFirestore.instance.collection('Users').doc(user.uid).collection('Ratings').doc(docId);
+    try{
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Removing rating...'))
+      );
+
+        await FirebaseFirestore.instance.runTransaction((transaction) async {
+        final mediaSnapshot = await transaction.get(mediaRatingRef);
+
+        double currentAvg;
+        int currentCount;
+        final tmdbAvg = (_media?['vote_average'] as num? ?? 0.0).toDouble();
+
+        if (mediaSnapshot.exists) {
+          currentAvg = (mediaSnapshot.data()?['averageRating'] ?? 0.0).toDouble();
+          currentCount = (mediaSnapshot.data()?['ratingCount'] ?? 1).toInt();
+        } else {
+          currentAvg = tmdbAvg;
+          currentCount = 1;
+        }
+
+        double newAvg;
+        int newCount;
+
+        if (_userExistingRating != null) {
+          // --- CASE 1: Updating an existing rating ---
+          // Formula: ((averageRating * ratingCount) - oldUsrRating + newRating) / ratingCount
+          // No need to update the rating count in this scenario.
+          if (currentCount > 1) {
+            newAvg = ((currentAvg * currentCount) - _userExistingRating!) /
+                (currentCount-1);
+          } else {
+            newAvg = 0;
+          }
+          newCount = currentCount - 1;
+        }
+        else{
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: 
+            Text('Please rate this title before removing it')));
+            return;
+        }
+
+        // Update global media rating document
+        transaction.set(
+          mediaRatingRef,
+          {
+            'averageRating': newAvg,
+            'ratingCount': newCount,
+          },
+          SetOptions(merge: true),
+        );
+
+        userRatingRef.delete();
+
+        if (mounted) {
+          setState(() {
+            _firebaseAverageRating = newAvg;
+            _firebaseRatingCount = newCount;
+            _userExistingRating = null;
+          });
+        }
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Rating removed successfully!')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to submit rating: $e')),
+      );
+    }
+  }
+
   Future<void> _submitRating(double userRating) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -213,6 +319,7 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
       );
 
       await FirebaseFirestore.instance.collection('Users').doc(user.uid).collection('Watchlist').doc(docId).delete();
+      setState(() {onToWatchList = false;});
 
       await FirebaseFirestore.instance.runTransaction((transaction) async {
         final mediaSnapshot = await transaction.get(mediaRatingRef);
@@ -393,6 +500,7 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
     });
     _loadMedia();
     _loadFirebaseRating();
+    getListData();
   }
 
   @override
@@ -467,9 +575,17 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
                 const SizedBox(height: 25),
                 _buildBasicInformation(releaseDate, _getRuntime()),
                 const SizedBox(height: 25),
-                
-                // Rate Button above overview
-                _buildRateButton(),
+                _userExistingRating != null ?
+                Row(
+                  children: [
+                    // Rate Button above overview
+                    _buildRateButton(),
+                    Spacer(),
+                    _buildRemoveRatingButton()
+                  ]
+                )
+                : _buildRateButton(),
+
                 const SizedBox(height: 25),
 
                 _buildSection(
@@ -825,8 +941,9 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
   }
 
   Widget _buildRateButton() {
+    double screenWidth = MediaQuery.of(context).size.width;
     return SizedBox(
-      width: double.infinity,
+      width: _userExistingRating != null ? 24 * screenWidth / 50 : screenWidth,
       height: 50,
       child: ElevatedButton.icon(
         onPressed: _showRatingDialog,
@@ -843,11 +960,27 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
     );
   }
 
+  Widget _buildRemoveRatingButton(){
+    double screenWidth = MediaQuery.of(context).size.width;
+    return SizedBox(
+      width: 24 * screenWidth  / 50,
+      height: 50,
+      child: ElevatedButton.icon(
+        onPressed: removeRatingInfo,
+        icon: const Icon(Icons.delete),
+        label: Text(
+          'Remove rating',
+          style: const TextStyle(fontSize: 16),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.amber[700],
+          foregroundColor: Colors.white
+        )
+      )
+    );
+  }
+
   Widget _buildWatchlistButton() {
-    //trying to get this to work
-    // final docId = '${widget.mediaType.name}_${widget.mediaId}';
-    // var inWatchList = FirebaseFirestore.instance.collection('Users').doc('user.uid')
-    //   .collection('Watchlist').where('mediaId', isEqualTo: docId.replaceAll(RegExp(r'[^0-9]'), '')).get();
     return 
     SizedBox(
       width: double.infinity,
@@ -855,7 +988,7 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
       child: ElevatedButton.icon(
         onPressed: _isLoading ? null : addMedia,
         icon: const Icon(Icons.bookmark_add_outlined),
-        label: const Text('Add to Watchlist', style: TextStyle(fontSize: 16)),
+        label: Text(onToWatchList ? 'Remove From Watchlist' : 'Add to Watchlist', style: TextStyle(fontSize: 16)),
       ),
     );
   }
