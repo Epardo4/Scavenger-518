@@ -16,6 +16,40 @@ class _ProfilePageState extends State<ProfilePage> {
   int currentPage = 1;
   bool showRated = true;
 
+Future<void> _editProfile(
+    String uid, String first, String last, String username) async {
+  final result = await showDialog<Map<String, String>>(
+    context: context,
+    builder: (_) => EditProfileDialog(
+      uid: uid,
+      firstName: first,
+      lastName: last,
+      username: username,
+    ),
+  );
+
+  if (result == null) return; // cancelled
+
+  try {
+    await FirebaseFirestore.instance
+        .collection('Users')
+        .doc(uid)
+        .set(result, SetOptions(merge: true));
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Profile updated!')),
+    );
+  } catch (e) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Failed to update profile: $e')),
+    );
+  }
+}
+
+
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -31,8 +65,8 @@ class _ProfilePageState extends State<ProfilePage> {
                 builder: (context, snapshot){
                   final profile = snapshot.data?.data() ?? {};
                   final firstName = profile['first'] as String? ?? '';
-                  final lastName = profile['last'] as String ?;
-                  final username = profile['username'] as String ?;
+                  final lastName = profile['last'] as String? ?? '';
+                  final username = profile['username'] as String? ?? '';
 
                   final fullName = '$firstName $lastName'.trim();
 
@@ -69,10 +103,20 @@ class _ProfilePageState extends State<ProfilePage> {
                                 style: TextStyle(
                                   fontSize: 15,
                                   color: Colors.grey.shade600
-                                )
-                              )
+                                ),
+                              ),
                             ]
-                          )
+                          ),
+                        ),
+                        IconButton(
+                            icon: const Icon(Icons.edit),
+                            tooltip: 'Edit Profile',
+                            onPressed: () => _editProfile(
+                              user.uid,
+                              firstName,
+                              lastName,
+                              username,
+                            ),
                         )
                       ]
                     )
@@ -277,6 +321,111 @@ class _ProfilePageState extends State<ProfilePage> {
       child: const Center(
         child: Icon(Icons.movie, size: 30, color: Colors.grey),
       ),
+    );
+  }
+}
+
+class EditProfileDialog extends StatefulWidget {
+  final String uid;
+  final String firstName;
+  final String lastName;
+  final String username;
+
+  const EditProfileDialog({
+    super.key,
+    required this.uid,
+    required this.firstName,
+    required this.lastName,
+    required this.username,
+  });
+
+  @override
+  State<EditProfileDialog> createState() => _EditProfileDialogState();
+}
+
+class _EditProfileDialogState extends State<EditProfileDialog> {
+  final _formKey = GlobalKey<FormState>();
+
+  late final TextEditingController _firstNameController;
+  late final TextEditingController _lastNameController;
+  late final TextEditingController _usernameController;
+
+  @override
+  void initState() {
+    super.initState();
+    _firstNameController = TextEditingController(text: widget.firstName);
+    _lastNameController = TextEditingController(text: widget.lastName);
+    _usernameController = TextEditingController(text: widget.username);
+  }
+
+  @override
+  void dispose() {
+    _firstNameController.dispose();
+    _lastNameController.dispose();
+    _usernameController.dispose();
+    super.dispose();
+  }
+
+  String? _required(String? v, String label) =>
+      (v == null || v.trim().isEmpty) ? 'Please enter $label' : null;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Edit Profile'),
+      content: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: _usernameController,
+                decoration: const InputDecoration(
+                  labelText: 'User Name',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (v) => _required(v, 'a username'),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _firstNameController,
+                decoration: const InputDecoration(
+                  labelText: 'First Name',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (v) => _required(v, 'your first name'),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _lastNameController,
+                decoration: const InputDecoration(
+                  labelText: 'Last Name',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (v) => _required(v, 'your last name'),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            if (!_formKey.currentState!.validate()) return;
+            Navigator.pop(context, {
+              'username': _usernameController.text.trim(),
+              'first': _firstNameController.text.trim(),
+              'last': _lastNameController.text.trim(),
+            });
+          },
+          child: const Text('Save'),
+        ),
+      ],
     );
   }
 }
