@@ -21,16 +21,20 @@ class MediaDetailsPage extends StatefulWidget {
 }
 
 class _MediaDetailsPageState extends State<MediaDetailsPage> {
+  final reviewController = TextEditingController();
   final TmdbService _tmdbService = TmdbService();
 
   Map<String, dynamic>? _media;
   bool _isLoading = true;
   String? _errorMessage;
+  bool hideReview = true;
+
 
   // Custom Firebase Rating State
   double? _firebaseAverageRating;
   int _firebaseRatingCount = 0;
-  double? _userExistingRating; // Tracks what the current user previously rated it
+  double? _userExistingRating;
+  String? userExistingReview; // Tracks what the current user previously rated it
   bool onToWatchList = false;
 
   bool get _isMovie => widget.mediaType == MediaType.movie;
@@ -184,6 +188,7 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
             _userExistingRating =
                 (userRatingDoc.data()?['rating'] as num?)?.toDouble();
           });
+            userExistingReview = (userRatingDoc.data()?['review'] as String?)?.toString();
         }
       }
     } catch (_) {
@@ -245,7 +250,9 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
         double newAvg;
         int newCount;
 
-        if (_userExistingRating != null) {
+        double userRating = _userExistingRating != null ? _userExistingRating as double : -2;
+
+        if (_userExistingRating != null && userRating >= 0) {
           // --- CASE 1: Updating an existing rating ---
           // Formula: ((averageRating * ratingCount) - oldUsrRating + newRating) / ratingCount
           // No need to update the rating count in this scenario.
@@ -256,30 +263,36 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
             newAvg = 0;
           }
           newCount = currentCount - 1;
+                  // Update global media rating document
+          transaction.set(
+            mediaRatingRef,
+            {
+              'averageRating': newAvg,
+              'ratingCount': newCount,
+            },
+            SetOptions(merge: true),
+          );
+          if(mounted) {
+            setState(() {
+              _firebaseAverageRating = newAvg;
+              _firebaseRatingCount = newCount;
+            });
+          }
         }
-        else{
+        else if(_userExistingRating == null){
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: 
             Text('Please rate this title before removing it')));
             return;
         }
 
-        // Update global media rating document
-        transaction.set(
-          mediaRatingRef,
-          {
-            'averageRating': newAvg,
-            'ratingCount': newCount,
-          },
-          SetOptions(merge: true),
-        );
+
 
         userRatingRef.delete();
 
         if (mounted) {
           setState(() {
-            _firebaseAverageRating = newAvg;
-            _firebaseRatingCount = newCount;
             _userExistingRating = null;
+            userExistingReview = null;
           });
         }
       });
@@ -291,7 +304,7 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to submit rating: $e')),
+        SnackBar(content: Text('Failed to remove rating: $e')),
       );
     }
   }
@@ -323,7 +336,7 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
 
       await FirebaseFirestore.instance.runTransaction((transaction) async {
         final mediaSnapshot = await transaction.get(mediaRatingRef);
-
+      if(userRating >= 0){
         double currentAvg;
         int currentCount;
         final tmdbAvg = (_media?['vote_average'] as num? ?? 0.0).toDouble();
@@ -366,6 +379,12 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
           SetOptions(merge: true),
         );
 
+        setState(() {
+            _firebaseAverageRating = newAvg;
+            _firebaseRatingCount = newCount;
+        });
+      }
+
         // Save/Update user's personal rating record
         String title = 'Unknown title';
         if (_media != null) {
@@ -381,36 +400,41 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
           posterPath = _media!['poster_path'] as String?;
         }
 
-        transaction.set(
-          userRatingRef,
-          {
-            'mediaId': widget.mediaId,
-            'mediaType': widget.mediaType.name,
-            'title': title,
-            'posterPath': posterPath ?? '',
-            'rating': userRating,
-            'timestamp': FieldValue.serverTimestamp(),
-          },
-          SetOptions(merge: true),
-        );
-
-        transaction.set(
-          userRatingRef,
-          {
-            'mediaId': widget.mediaId,
-            'mediaType': widget.mediaType.name,
-            'title': title,
-            'posterPath': posterPath ?? '',
-            'rating': userRating,
-            'timestamp': FieldValue.serverTimestamp(),
-          },
-          SetOptions(merge: true),
-        );
+        if(reviewController.text.trim().isEmpty){
+          transaction.set(
+            userRatingRef,
+            {
+              'mediaId': widget.mediaId,
+              'mediaType': widget.mediaType.name,
+              'title': title,
+              'posterPath': posterPath ?? '',
+              'rating': userRating,
+              'timestamp': FieldValue.serverTimestamp(),
+           },
+            SetOptions(merge: true),
+          );
+        }
+        else{
+          transaction.set(
+            userRatingRef,
+            {
+              'mediaId': widget.mediaId,
+              'mediaType': widget.mediaType.name,
+              'title': title,
+              'posterPath': posterPath ?? '',
+              'rating': userRating,
+              'review': reviewController.text.trim(),
+              'timestamp': FieldValue.serverTimestamp(),
+           },
+            SetOptions(merge: true),
+          );
+          setState(() {
+            userExistingReview = reviewController.text.trim();
+          });
+        }
 
         if (mounted) {
           setState(() {
-            _firebaseAverageRating = newAvg;
-            _firebaseRatingCount = newCount;
             _userExistingRating = userRating;
           });
         }
@@ -471,6 +495,15 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
                       });
                     },
                   ),
+                  TextField(
+                    maxLines: null,
+                    controller: reviewController,
+                    keyboardType: TextInputType.multiline,
+                    decoration: const InputDecoration(
+                      labelText: 'Review',
+                      border: OutlineInputBorder()
+                    )
+                  ),
                 ],
               );
             },
@@ -479,6 +512,13 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
             TextButton(
               onPressed: () => Navigator.pop(context),
               child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _submitRating(-1);
+              },
+              child: Text('Submit Without Rating')
             ),
             ElevatedButton(
               onPressed: () {
@@ -750,6 +790,7 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
   }
 
   Widget _buildPosterAndTitle(String? posterPath, String title, double rating) {
+    double userRating = _userExistingRating != null ? _userExistingRating as double: -2;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -788,10 +829,11 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
                   style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
               ],
-              if (_userExistingRating != null) ...[
+              if (_userExistingRating != null && userRating != -2) ...[
                 const SizedBox(height: 4),
                 Text(
-                  'Your Rating: ${_userExistingRating!.toStringAsFixed(0)} / 10',
+                  userRating != -1 ? 'Your Rating: ${_userExistingRating!.toStringAsFixed(0)} / 10'
+                    : 'You watched, but didn\'t leave a rating',
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.bold,
@@ -799,6 +841,17 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
                   ),
                 ),
               ],
+              if(userExistingReview != null) ...[
+                const SizedBox(height: 4),
+                GestureDetector(onTap: () {setState(() {hideReview = !hideReview;});},
+                  child: Text(hideReview ? 'Show Review' : 'Hide Review\n${userExistingReview!}',
+                      style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.deepPurple
+                
+                ))),
+              ]
             ],
           ),
         ),
@@ -966,7 +1019,7 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
       width: 24 * screenWidth  / 50,
       height: 50,
       child: ElevatedButton.icon(
-        onPressed: removeRatingInfo,
+        onPressed: _isLoading ? null : removeRatingInfo,
         icon: const Icon(Icons.delete),
         label: Text(
           'Remove rating',
@@ -988,7 +1041,7 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
       child: ElevatedButton.icon(
         onPressed: _isLoading ? null : addMedia,
         icon: const Icon(Icons.bookmark_add_outlined),
-        label: Text(onToWatchList ? 'Remove From Watchlist' : 'Add to Watchlist', style: TextStyle(fontSize: 16)),
+        label: Text(onToWatchList ? 'Remove from to-watch List' : 'Add to to-watch list', style: TextStyle(fontSize: 16)),
       ),
     );
   }

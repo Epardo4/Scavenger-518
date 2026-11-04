@@ -282,10 +282,13 @@ Future<void> _editProfile(
                                     showRated ?
                                     Row(
                                       children: [
-                                        const Icon(Icons.star, color: Colors.amber, size: 18),
+                                        userRating != -1 ? 
+                                        const Icon(Icons.star, color: Colors.amber, size: 18) : 
+                                        const Icon(Icons.movie, color: Colors.blue, size: 18),
                                         const SizedBox(width: 4),
                                         Text(
-                                          'Your Rating: ${userRating.toStringAsFixed(0)} / 10',
+                                          userRating != -1 ? 'Your Rating: ${userRating.toStringAsFixed(0)} / 10' :
+                                          'You watched, but didn\'t leave a rating',
                                           style: const TextStyle(
                                             fontWeight: FontWeight.bold,
                                             fontSize: 14,
