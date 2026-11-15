@@ -1,10 +1,50 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'episode_details_page.dart';
 import 'Models/media.dart';
 import 'tmdb_service.dart';
 import 'actor_details_page.dart';
+
+const Map<String, String> _providerSearchUrls = {
+  'netflix': 'https://www.netflix.com/search?q=',
+  'amazon prime video': 'https://www.amazon.com/s?i=instant-video&k=',
+  'amazon video': 'https://www.amazon.com/s?i=instant-video&k=',
+  'disney': 'https://www.disneyplus.com/search?q=',
+  'hulu': 'https://www.hulu.com/search?q=',
+  'apple tv': 'https://tv.apple.com/search?term=',
+  'peacock': 'https://www.peacocktv.com/search?q=',
+  'paramount': 'https://www.paramountplus.com/search/?q=',
+  'max': 'https://www.max.com/search?q=',
+  'youtube': 'https://www.youtube.com/results?search_query=',
+  'tubi': 'https://tubitv.com/search/',
+  'google play': 'https://play.google.com/store/search?c=movies&q=',
+  'fandango at home': 'https://athome.fandango.com/content/search?searchString=',
+  'vudu': 'https://athome.fandango.com/content/search?searchString=',
+};
+
+/// Search page for [providerName], or [tmdbLink] when the service is unknown.
+String? streamingProviderUrl({
+  required String providerName,
+  required String title,
+  String? tmdbLink,
+}) {
+  final lower = providerName.toLowerCase();
+  if (title.isNotEmpty) {
+    final keys = _providerSearchUrls.keys.toList()
+      ..sort((a, b) => b.length.compareTo(a.length));
+    for (final key in keys) {
+      final match = key == 'max'
+          ? (lower == 'max' || lower == 'hbo max')
+          : lower.contains(key);
+      if (match) {
+        return '${_providerSearchUrls[key]}${Uri.encodeComponent(title)}';
+      }
+    }
+  }
+  return tmdbLink;
+}
 
 class MediaDetailsPage extends StatefulWidget {
   final int mediaId;
@@ -35,6 +75,7 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
   int _firebaseRatingCount = 0;
   double? _userExistingRating;
   String? userExistingReview; // Tracks what the current user previously rated it
+  bool userRecommended = false;
   bool onToWatchList = false;
   List<dynamic> reviewedUsers = [];
 
@@ -264,6 +305,7 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
         'mediaType': widget.mediaType.name,
         'title': title,
         'posterPath': posterPath,
+        'recommended': userRecommended,
         'addedAt': FieldValue.serverTimestamp()
       });
 
@@ -366,6 +408,7 @@ Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumb
                 (userRatingDoc.data()?['rating'] as num?)?.toDouble();
           });
             userExistingReview = (userRatingDoc.data()?['review'] as String?)?.toString();
+            userRecommended = (userRatingDoc.data()?['recommended'] as bool?) ?? false;
         }
       }
     } catch (_) {
@@ -608,6 +651,7 @@ Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumb
               'mediaType': widget.mediaType.name,
               'title': title,
               'posterPath': posterPath ?? '',
+              'recommended': userRecommended,
               'rating': userRating,
               'timestamp': FieldValue.serverTimestamp(),
            },
@@ -657,7 +701,9 @@ Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumb
     if(selectedRating == -1){
       selectedRating = 5;
     }
-
+    
+    bool selectedRecommended = userRecommended;
+    
     showDialog(
       context: context,
       builder: (context) {
@@ -707,6 +753,17 @@ Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumb
                       border: OutlineInputBorder()
                     )
                   ),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: const Text('Recommend to my friends'),
+                    value: selectedRecommended,
+                    onChanged: (v) {
+                      setDialogState(() {
+                        selectedRecommended = v ?? false;
+                      });
+                    },
+                  ),
                 ],
               );
             },
@@ -719,6 +776,7 @@ Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumb
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(context);
+                userRecommended = selectedRecommended;
                 _submitRating(-1);
               },
               child: Text('Submit Without Rating')
@@ -726,6 +784,7 @@ Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumb
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(context);
+                userRecommended = selectedRecommended;
                 _submitRating(selectedRating.toDouble());
               },
               child: Text(_userExistingRating != null ? 'Update' : 'Submit'),
@@ -1441,34 +1500,88 @@ Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumb
         if (flatrate.isNotEmpty) ...[
           const Text('Streaming', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey)),
           const SizedBox(height: 6),
-          _buildProviderChips(flatrate),
+          _buildProviderChips(flatrate, regionData['link'] as String?),
           const SizedBox(height: 12),
         ],
         if (rent.isNotEmpty) ...[
           const Text('Rent', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey)),
           const SizedBox(height: 6),
-          _buildProviderChips(rent),
+          _buildProviderChips(rent, regionData['link'] as String?),
           const SizedBox(height: 12),
         ],
         if (buy.isNotEmpty) ...[
           const Text('Buy', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey)),
           const SizedBox(height: 6),
-          _buildProviderChips(buy),
+          _buildProviderChips(buy, regionData['link'] as String?),
         ],
       ],
     );
   }
 
-  Widget _buildProviderChips(List<dynamic> providers) {
+  Future<void> _openProvider(String providerName, String? tmdbLink) async {
+    final title = (_media?['title'] ?? _media?['name'] ?? '').toString();
+    final url = streamingProviderUrl(
+      providerName: providerName,
+      title: title,
+      tmdbLink: tmdbLink,
+    );
+    if (url == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No link available for this service.')),
+      );
+      return;
+    }
+    try {
+      final ok = await launchUrl(
+        Uri.parse(url),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open the link.')),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open the link.')),
+      );
+    }
+  }
+
+  Widget _buildProviderChips(List<dynamic> providers, String? tmdbLink) {
+    return StreamingProviderChips(
+      providers: providers,
+      onOpen: (name) => _openProvider(name, tmdbLink),
+    );
+  }
+
+
+}
+
+class StreamingProviderChips extends StatelessWidget {
+  final List<dynamic> providers;
+  final ValueChanged<String> onOpen;
+
+  const StreamingProviderChips({
+    super.key,
+    required this.providers,
+    required this.onOpen,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       children: providers.map((provider) {
-        final name = provider['provider_name'] ?? '';
+        final name = (provider['provider_name'] ?? '').toString();
         final logoPath = provider['logo_path'] as String?;
-        final logoUrl = logoPath != null ? 'https://image.tmdb.org/t/p/w92$logoPath' : '';
+        final logoUrl =
+            logoPath != null ? 'https://image.tmdb.org/t/p/w92$logoPath' : '';
 
-        return Chip(
+        return ActionChip(
+          onPressed: () => onOpen(name),
           avatar: logoUrl.isNotEmpty
               ? ClipRRect(
                   borderRadius: BorderRadius.circular(4),
@@ -1486,8 +1599,6 @@ Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumb
       }).toList(),
     );
   }
-
-
 }
 
 class _InfoChip extends StatelessWidget {

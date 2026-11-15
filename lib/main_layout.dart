@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'home_page.dart';
 import 'profile_page.dart';
 import 'search_screen.dart';
+import 'friends.dart';
 import 'main.dart'; // For themeNotifier
 
 class MainLayout extends StatefulWidget {
@@ -15,9 +16,10 @@ class MainLayout extends StatefulWidget {
 class _MainLayoutState extends State<MainLayout> {
   int _currentIndex = 0;
 
-  final List<Widget> _pages = const [
-    HomePage(),
-    ProfilePage(),
+  final List<Widget> _pages = [
+    const HomePage(),
+    const FriendsPage(),
+    const ProfilePage(),
   ];
 
   Future<void> _logOut() async {
@@ -80,6 +82,7 @@ class _MainLayoutState extends State<MainLayout> {
         },
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
+          BottomNavigationBarItem(icon: Icon(Icons.people), label: "Friends"),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: "Profile"),
         ],
       ),
