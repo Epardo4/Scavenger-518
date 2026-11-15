@@ -36,12 +36,17 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
   double? _userExistingRating;
   String? userExistingReview; // Tracks what the current user previously rated it
   bool onToWatchList = false;
+  List<dynamic> reviewedUsers = [];
 
   bool get _isMovie => widget.mediaType == MediaType.movie;
 
   int _selectedSeasonNumber = 1;
   List<dynamic> _seasonEpisodes = [];
+  List<dynamic> _seasonEpisodeRatings = [];
   bool _isLoadingEpisodes = false;
+  bool showCast = true;
+  bool showReviews = false;
+  bool liking = false;
 
   @override
   void initState() {
@@ -49,6 +54,144 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
     _loadMedia();
     _loadFirebaseRating();
     getListData();
+    _loadReviews();
+  }
+
+  Future<void> like(List<dynamic> review) async {
+    try{
+      setState(() {liking = true;});
+      String mediaType;
+      if(widget.mediaType == MediaType.tv) mediaType = 'tv';
+      else mediaType = 'movie';
+      String docId = 'user_${review[1]}_${mediaType}_${widget.mediaId}';
+      bool liked = false;
+      bool disliked = false;
+      final user = FirebaseAuth.instance.currentUser;
+      final existingLike = await FirebaseFirestore.instance.collection('Users').doc(user!.uid).collection('Likes').doc(docId).get();
+      if(existingLike.exists){
+        existingLike['liked'] ? liked = true : disliked = true;
+      }
+      if(liked) {
+        await FirebaseFirestore.instance.collection('Users').doc(user!.uid).collection('Likes').doc(docId).delete();
+      }
+      else{
+        await FirebaseFirestore.instance.collection('Users').doc(user!.uid).collection('Likes').doc(docId).set({
+          'liked': true
+        });
+      }
+      String mediaString = '${mediaType}_${widget.mediaId}';
+      final rating = await FirebaseFirestore.instance.collection('Users').doc(review[0]).
+          collection('Ratings').doc(mediaString).get();
+      int likeCount = 0;
+      int dislikeCount = 0;
+      if(rating.data()!.containsKey('dislikes')){
+        dislikeCount = rating['dislikes'];
+      }
+      if(rating.data()!.containsKey('likes')) {
+        likeCount = rating['likes'];
+      }
+      likeCount = liked ? likeCount - 1 : likeCount + 1;
+      dislikeCount = disliked ? dislikeCount - 1 : dislikeCount;
+      await FirebaseFirestore.instance.collection('Users').doc(review[0]).collection('Ratings').doc(mediaString).update({
+        'likes': likeCount,
+        'dislikes': dislikeCount
+      });
+      setState(() {
+        review[5] = liked ? -1 : 1;
+        review[3] = likeCount;
+        review[4] = dislikeCount;
+        liking = false;
+      });
+    }catch(e){}
+  }
+
+  Future<void> dislike(List<dynamic> review) async {
+    try{
+      setState(() {liking = true;});
+      String mediaType;
+      if(widget.mediaType == MediaType.tv) mediaType = 'tv';
+      else mediaType = 'movie';
+      String docId = 'user_${review[1]}_${mediaType}_${widget.mediaId}';
+      bool liked = false;
+      bool disliked = false;
+      final user = FirebaseAuth.instance.currentUser;
+      final existingLike = await FirebaseFirestore.instance.collection('Users').doc(user!.uid).collection('Likes').doc(docId).get();
+      if(existingLike.exists){
+        existingLike['liked'] ? liked = true : disliked = true;
+      }
+      if(disliked) {
+        await FirebaseFirestore.instance.collection('Users').doc(user!.uid).collection('Likes').doc(docId).delete();
+      }
+      else{
+        await FirebaseFirestore.instance.collection('Users').doc(user!.uid).collection('Likes').doc(docId).set({
+          'liked': false
+        });
+      }
+      String mediaString = '${mediaType}_${widget.mediaId}';
+      final rating = await FirebaseFirestore.instance.collection('Users').doc(review[0]).
+          collection('Ratings').doc(mediaString).get();
+      int likeCount = 0;
+      int dislikeCount = 0;
+      if(rating.data()!.containsKey('dislikes')){
+        dislikeCount = rating['dislikes'];
+      }
+      if(rating.data()!.containsKey('likes')) {
+        likeCount = rating['likes'];
+      }
+      likeCount = liked ? likeCount - 1 : likeCount;
+      dislikeCount = disliked ? dislikeCount - 1 : dislikeCount + 1;
+      await FirebaseFirestore.instance.collection('Users').doc(review[0]).collection('Ratings').doc(mediaString).update({
+        'likes': likeCount,
+        'dislikes': dislikeCount
+      });
+      setState(() {
+        review[5] = disliked ? -1 : 0;
+        review[3] = likeCount;
+        review[4] = dislikeCount;
+        liking = false;
+      });
+    }catch(e){}
+  }
+
+  Future<void> _loadReviews() async {
+    try{
+      setState(() {_isLoading = true;});
+      String mediaString = '';
+      if(widget.mediaType == MediaType.movie){
+        mediaString = 'movie_${widget.mediaId}';
+      }
+      else{
+        mediaString = 'tv_${widget.mediaId}';
+      }
+      final users = await FirebaseFirestore.instance.collection('Users').get();
+      final currentUser = await FirebaseAuth.instance.currentUser;
+      
+      for(var user in users.docs){
+        final rating = await FirebaseFirestore.instance.collection('Users').doc(user.id).
+          collection('Ratings').doc(mediaString).get();
+          if(rating.exists && user.id != currentUser?.uid){
+            int likeCount = 0;
+            if(rating.data()!.containsKey('likes')){
+              likeCount = rating['likes'];
+            }
+            int dislikeCount = 0;
+            if(rating.data()!.containsKey('dislikes')){
+              dislikeCount = rating['dislikes'];
+            }
+            final liked = await FirebaseFirestore.instance.collection('Users').doc(currentUser?.uid).collection('Likes').
+              doc('user_${user['username']}_$mediaString').get();
+            int likedIndex = -1;
+            if(liked.exists){
+              liked['liked'] ? likedIndex = 1 : likedIndex = 0;
+            }
+            setState(() {
+              reviewedUsers.add([user.id, user['username'], rating, likeCount, dislikeCount, likedIndex]);
+              _isLoading = false;
+            });
+          }
+      }
+
+    }catch(e){}
   }
 
   Future<void> _loadMedia() async {
@@ -147,12 +290,46 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
       _seasonEpisodes = seasonData['episodes'] as List<dynamic>? ?? [];
       _isLoadingEpisodes = false;
     });
+    for(int i = 0; i < _seasonEpisodes.length; i++){
+      List<double> ratings = await _loadEpisodeFirebaseRating(seasonNumber,_seasonEpisodes[i]['episode_number'] as int);
+      if(ratings[0] == -1) ratings[0] = _seasonEpisodes[i]['vote_average'];
+      setState(() {_seasonEpisodeRatings.add(ratings);});
+    }
   } catch (_) {
     if (!mounted) return;
     setState(() {
       _seasonEpisodes = [];
       _isLoadingEpisodes = false;
     });
+  }
+}
+
+Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumber) async{
+  try{
+    final docId = 'tv_${widget.mediaId}_s${seasonNumber}_e${episodeNumber}';
+    final firestore = FirebaseFirestore.instance;
+    final doc = await firestore.collection('MediaRatings').doc(docId).get();
+    double avgRating;
+    double userRating;
+    if(doc.exists && mounted){
+      avgRating = doc.data()?['averageRating'] as double;
+    }
+    else{
+      avgRating = -1;
+    }
+    final user = FirebaseAuth.instance.currentUser;
+    if(user != null){
+      final userRatingDoc = await firestore.collection('Users').doc(user.uid).collection('Ratings').doc(docId).get();
+      if(userRatingDoc.exists && mounted){
+        userRating = userRatingDoc.data()?['rating'] as double;
+      }
+      else  userRating = -2;
+    }
+    else userRating = -2;
+    return [avgRating,userRating];
+  }catch(e){
+    print(e);
+    return [-1,-2];
   }
 }
 
@@ -336,23 +513,24 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
 
       await FirebaseFirestore.instance.runTransaction((transaction) async {
         final mediaSnapshot = await transaction.get(mediaRatingRef);
+      double currentAvg;
+      int currentCount;
+      final tmdbAvg = (_media?['vote_average'] as num? ?? 0.0).toDouble();
+
+      if (mediaSnapshot.exists) {
+        currentAvg = (mediaSnapshot.data()?['averageRating'] ?? 0.0).toDouble();
+        currentCount = (mediaSnapshot.data()?['ratingCount'] ?? 1).toInt();
+      } else {
+        currentAvg = tmdbAvg;
+        currentCount = 1;
+      }
+
+      double newAvg;
+      int newCount;
+
       if(userRating >= 0){
-        double currentAvg;
-        int currentCount;
-        final tmdbAvg = (_media?['vote_average'] as num? ?? 0.0).toDouble();
 
-        if (mediaSnapshot.exists) {
-          currentAvg = (mediaSnapshot.data()?['averageRating'] ?? 0.0).toDouble();
-          currentCount = (mediaSnapshot.data()?['ratingCount'] ?? 1).toInt();
-        } else {
-          currentAvg = tmdbAvg;
-          currentCount = 1;
-        }
-
-        double newAvg;
-        int newCount;
-
-        if (_userExistingRating != null) {
+        if (_userExistingRating != null && _userExistingRating! != -1) {
           // --- CASE 1: Updating an existing rating ---
           // Formula: ((averageRating * ratingCount) - oldUsrRating + newRating) / ratingCount
           // No need to update the rating count in this scenario.
@@ -383,6 +561,28 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
             _firebaseAverageRating = newAvg;
             _firebaseRatingCount = newCount;
         });
+      }
+      else{
+        if(_userExistingRating != null && _userExistingRating! != -1){
+          if(currentCount > 1){
+            newAvg = ((currentCount * currentAvg) - _userExistingRating!)/(currentCount-1);
+            newCount = currentCount - 1;
+          }
+          else{
+            newAvg = 0;
+            newCount = 0;
+          }
+          transaction.set(mediaRatingRef,{
+            'averageRating': newAvg,
+            'ratingCount': newCount
+          },
+          SetOptions(merge: true));
+
+          setState(() {
+            _firebaseAverageRating = newAvg;
+            _firebaseRatingCount = newCount;
+          });
+        }
       }
 
         // Save/Update user's personal rating record
@@ -454,6 +654,9 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
 
   void _showRatingDialog() {
     int selectedRating = _userExistingRating?.round() ?? 5;
+    if(selectedRating == -1){
+      selectedRating = 5;
+    }
 
     showDialog(
       context: context,
@@ -647,8 +850,11 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
                 _buildEpisodesSection(),
                 const SizedBox(height: 20),
                 ],
-
-                _buildSection(title: 'Cast', child: _buildCast(cast)),
+                _buildCastOrReviews(),
+                SizedBox(height: 30),
+                showCast ? _buildCast(cast) : _buildReviews(),
+                  // _buildSection(title: 'Cast', child: _buildCast(cast)),
+                  // _buildSection(title: 'Reviews', child: _buildReviews()),
                 const SizedBox(height: 25),
                 _buildWatchlistButton(),
                 const SizedBox(height: 20),
@@ -657,6 +863,121 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildCastOrReviews(){
+    return 
+      Row( mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          GestureDetector(onTap: () {
+            setState(() {
+              showCast = true;
+              showReviews = false;
+            });
+          },
+            child: 
+            showCast ? 
+            Text('Cast', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 40, 
+              color: Colors.indigo
+            )) : 
+            Text('Cast', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 40,
+              color: Colors.grey
+            ))
+          ),
+          SizedBox(width: 20),
+          GestureDetector(onTap: () {
+            setState(() {
+              showReviews = true;
+              showCast = false;
+            });
+          },
+            child:
+            showReviews ?
+            Text('Reviews', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 40,
+              color: Colors.indigo
+            )) : 
+            Text('Reviews', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 40,
+              color: Colors.grey
+            ))
+          )
+      ]);
+  }
+
+  Widget _buildReviews(){
+    if(_isLoading){
+      return CircularProgressIndicator();
+    }
+    if(reviewedUsers.isEmpty){
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text('No other reviews yet', style: TextStyle(fontSize: 30))
+        ]
+      );
+    }
+    return Column(
+      children: [
+        for(var ratingDetails in reviewedUsers) ... [
+          Column(children: [
+            Row(
+              children: [
+                Text('${ratingDetails[1]}', style: TextStyle(fontWeight: FontWeight.bold,
+                  fontSize: 21)),
+                SizedBox(width: 20),
+                if(ratingDetails[2].data()['rating'] != -1) ... [
+                  Icon(Icons.star, size: 21, color: Colors.amber),
+                  Text('${ratingDetails[2].data()['rating']}/10', style: TextStyle(fontWeight: FontWeight.bold,
+                    fontSize: 21)),
+                ]
+                else ... [
+                  Icon(Icons.movie, size: 21, color: Colors.blue),
+                  Text('Didn\'t rate', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 21))
+                ],
+              ]
+            ),
+            SizedBox(height: 5),
+            if(ratingDetails[2].data()['review'] != null) ... [
+              Row(
+                children: [
+                  Text('Review:', style: TextStyle(fontSize: 20)),
+                  SizedBox(width: 8),
+                  Text('${ratingDetails[2].data()['review']}')
+                ]
+              )
+            ],
+            Row( children: [
+              Column( children: [
+                IconButton(
+                  icon: Icon(Icons.thumb_up),
+                  iconSize: 20,
+                  color: ratingDetails[5] == 1 ? Colors.blue : Colors.blueGrey ,
+                  onPressed: () {
+                    like(ratingDetails);
+                  }
+                ),
+
+                liking ? SizedBox(height: 15, width: 15, child: CircularProgressIndicator()) :
+                Text('${ratingDetails[3]}', style: TextStyle(fontSize: 15))
+              ]),
+              Column(children: [
+                IconButton(
+                  icon: Icon(Icons.thumb_down),
+                  iconSize: 20,
+                  color: ratingDetails[5] == 0 ? Colors.blue : Colors.blueGrey,
+                  onPressed: () {
+                    dislike(ratingDetails);
+                  }
+                ),
+
+                liking ? SizedBox(height: 15, width: 15, child: CircularProgressIndicator()) :
+                Text('${ratingDetails[4]}', style: TextStyle(fontSize: 15))
+              ])
+            ])
+          ],
+          ),
+        ]
+      ]
     );
   }
 
@@ -709,6 +1030,11 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
                     itemBuilder: (context, index) {
                       final ep = _seasonEpisodes[index];
                       final epNum = ep['episode_number'] ?? (index + 1);
+                      var episodeRatings;
+                      if(_seasonEpisodeRatings.length < index + 1)
+                        episodeRatings = [-1,-2];
+                      else 
+                        episodeRatings = _seasonEpisodeRatings[index];
                       final epName = ep['name'] ?? 'Episode $epNum';
                       final overview = ep['overview'] ?? '';
                       final stillPath = ep['still_path'] as String?;
@@ -735,10 +1061,48 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
                                   : _episodePlaceholder(),
                             ),
                           ),
-                          title: Text(
-                            '$epNum. $epName',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                          ),
+                          title: episodeRatings[0] != -1 ?
+                            Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '$epNum. $epName',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)
+                              ),
+                              Row(
+                                children: [
+                                  Icon(Icons.star, size: 12,color: Colors.amber),
+                                  Text('${(episodeRatings[0] as double).toStringAsFixed(1)}/10', style: TextStyle(fontWeight: FontWeight.bold, 
+                                  fontSize: 12)),
+                                  episodeRatings[1] != -2 ?
+                                  Row(
+                                    children: [
+                                      SizedBox(width: 20),
+                                      if(episodeRatings[1] != -1) ... [
+                                        Text('Your Rating: ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                        Icon(Icons.star, size: 12, color: Colors.amber),
+                                        Text('${episodeRatings[1]}/10', style: 
+                                          TextStyle(fontWeight: FontWeight.bold, fontSize: 12))
+                                      ]
+                                      else ... [
+                                        Text('You watched, but didn\'t leave a rating',
+                                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12) 
+                                        )
+                                      ]
+                                    ]
+                                  ) : 
+                                  SizedBox()
+                                ]
+                              )
+                            ]
+                          ) :
+                          Center(child: CircularProgressIndicator()),
+
+
+                          // title: Text(
+                          //   '$epNum. $epName',
+                          //   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          // ),
                           subtitle: Text(
                             overview,
                             maxLines: 2,

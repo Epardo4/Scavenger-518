@@ -24,11 +24,16 @@ class _EpisodeDetailsPageState extends State<EpisodeDetailsPage> {
   Map<String, dynamic>? _episodeData;
   bool _isLoading = true;
   String? _errorMessage;
+  final reviewController = TextEditingController();
 
   // Custom Firebase Rating State
   double? _firebaseAverageRating;
   int _firebaseRatingCount = 0;
   double? _userExistingRating;
+  String? userExistingReview;
+  bool onToWatchList = false;
+  bool hideReview = true;
+
 
   @override
   void initState() {
@@ -97,6 +102,7 @@ class _EpisodeDetailsPageState extends State<EpisodeDetailsPage> {
         if (userRatingDoc.exists && mounted) {
           setState(() {
             _userExistingRating = (userRatingDoc.data()?['rating'] as num?)?.toDouble();
+            userExistingReview = (userRatingDoc.data()?['review'] as String?)?.toString();
           });
         }
       }
@@ -128,24 +134,23 @@ class _EpisodeDetailsPageState extends State<EpisodeDetailsPage> {
       );
 
       await FirebaseFirestore.instance.runTransaction((transaction) async {
-        final mediaSnapshot = await transaction.get(mediaRatingRef);
+      final mediaSnapshot = await transaction.get(mediaRatingRef);
+      double currentAvg;
+      int currentCount;
+      final tmdbAvg = (_episodeData?['vote_average'] as num? ?? 0.0).toDouble();
 
-        double currentAvg;
-        int currentCount;
-        final tmdbAvg = (_episodeData?['vote_average'] as num? ?? 0.0).toDouble();
+      if (mediaSnapshot.exists) {
+        currentAvg = (mediaSnapshot.data()?['averageRating'] ?? 0.0).toDouble();
+        currentCount = (mediaSnapshot.data()?['ratingCount'] ?? 1).toInt();
+      } else {
+        currentAvg = tmdbAvg;
+        currentCount = 1;
+      }
 
-        if (mediaSnapshot.exists) {
-          currentAvg = (mediaSnapshot.data()?['averageRating'] ?? 0.0).toDouble();
-          currentCount = (mediaSnapshot.data()?['ratingCount'] ?? 1).toInt();
-        } else {
-          currentAvg = tmdbAvg;
-          currentCount = 1;
-        }
-
-        double newAvg;
-        int newCount;
-
-        if (_userExistingRating != null) {
+      double newAvg;
+      int newCount;
+      if(userRating >= 0){
+        if (_userExistingRating != null && _userExistingRating != -1) {
           if (currentCount > 0) {
             newAvg = ((currentAvg * currentCount) - _userExistingRating! + userRating) / currentCount;
           } else {
@@ -166,31 +171,81 @@ class _EpisodeDetailsPageState extends State<EpisodeDetailsPage> {
           },
           SetOptions(merge: true),
         );
+                if(mounted) {
+          setState(() {
+            _firebaseAverageRating = newAvg;
+            _firebaseRatingCount = newCount;
+          });
+        }
+      } else {
+          if (_userExistingRating != null && _userExistingRating != -1) {
+            if (currentCount > 1) {
+              newAvg = ((currentAvg * currentCount) - _userExistingRating!) / (currentCount - 1);
+              newCount = currentCount - 1;
+            } else {
+              newAvg = 0;
+              newCount = 0;
+            }
+
+          // Update global rating document
+          transaction.set(
+            mediaRatingRef,
+            {
+              'averageRating': newAvg,
+              'ratingCount': newCount,
+            },
+            SetOptions(merge: true),
+          );
+                  if(mounted) {
+            setState(() {
+              _firebaseAverageRating = newAvg;
+              _firebaseRatingCount = newCount;
+            });
+          }
+        }
+      }
 
         // Save user's personal rating record
         final epName = _episodeData?['name'] ?? 'Episode ${widget.episodeNumber}';
         final title = 'S${widget.seasonNumber} E${widget.episodeNumber}: $epName';
         final stillPath = _episodeData?['still_path'] as String? ?? '';
-
-        transaction.set(
-          userRatingRef,
-          {
-            'mediaId': widget.tvId,
-            'mediaType': 'tv',
-            'seasonNumber': widget.seasonNumber,
-            'episodeNumber': widget.episodeNumber,
-            'title': title,
-            'posterPath': stillPath,
-            'rating': userRating,
-            'timestamp': FieldValue.serverTimestamp(),
-          },
-          SetOptions(merge: true),
-        );
+        if(reviewController.text.trim().isEmpty){
+          transaction.set(
+            userRatingRef,
+            {
+              'mediaId': widget.tvId,
+              'mediaType': 'tv',
+              'seasonNumber': widget.seasonNumber,
+              'episodeNumber': widget.episodeNumber,
+              'title': title,
+              'posterPath': stillPath,
+              'rating': userRating,
+              'timestamp': FieldValue.serverTimestamp(),
+            },
+            SetOptions(merge: true),
+          );
+        }
+        else{
+          transaction.set(
+            userRatingRef,
+            {
+              'mediaId': widget.tvId,
+              'mediaType': 'tv',
+              'seasonNumber': widget.seasonNumber,
+              'episodeNumber': widget.episodeNumber,
+              'title': title,
+              'posterPath': stillPath,
+              'rating': userRating,
+              'review': reviewController.text.trim(),
+              'timestamp': FieldValue.serverTimestamp(),
+            },
+            SetOptions(merge: true),
+          );
+          setState(() {userExistingReview = reviewController.text.trim();});
+        }
 
         if (mounted) {
           setState(() {
-            _firebaseAverageRating = newAvg;
-            _firebaseRatingCount = newCount;
             _userExistingRating = userRating;
           });
         }
@@ -210,6 +265,7 @@ class _EpisodeDetailsPageState extends State<EpisodeDetailsPage> {
 
   void _showRatingDialog() {
     int selectedRating = _userExistingRating?.round() ?? 5;
+    if(selectedRating == -1) selectedRating = 5;
 
     showDialog(
       context: context,
@@ -251,6 +307,15 @@ class _EpisodeDetailsPageState extends State<EpisodeDetailsPage> {
                       });
                     },
                   ),
+                  TextField(
+                    maxLines: null,
+                    controller: reviewController,
+                    keyboardType: TextInputType.multiline,
+                    decoration: const InputDecoration(
+                      labelText: 'Review',
+                      border: OutlineInputBorder()
+                    )
+                  ),
                 ],
               );
             },
@@ -259,6 +324,13 @@ class _EpisodeDetailsPageState extends State<EpisodeDetailsPage> {
             TextButton(
               onPressed: () => Navigator.pop(context),
               child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _submitRating(-1);
+              },
+              child: Text('Submit Without Rating')
             ),
             ElevatedButton(
               onPressed: () {
@@ -284,7 +356,7 @@ class _EpisodeDetailsPageState extends State<EpisodeDetailsPage> {
   }
 
   Widget _buildBody() {
-    if (_isLoading) {
+    while (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
 
@@ -298,12 +370,12 @@ class _EpisodeDetailsPageState extends State<EpisodeDetailsPage> {
     final airDate = episode['air_date'] ?? '';
     
     final displayRating = _firebaseAverageRating ?? (episode['vote_average'] as num? ?? 0.0).toDouble();
+    double userRating = _userExistingRating ?? -2;
     
     final stillPath = episode['still_path'] as String?;
     final stillUrl = stillPath != null && stillPath.isNotEmpty
         ? 'https://image.tmdb.org/t/p/w780$stillPath'
         : '';
-
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -340,7 +412,7 @@ class _EpisodeDetailsPageState extends State<EpisodeDetailsPage> {
                     if (_firebaseRatingCount > 0) ...[
                       const SizedBox(width: 8),
                       Text(
-                        '($_firebaseRatingCount)',
+                        '($_firebaseRatingCount community ratings)',
                         style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                       ),
                     ],
@@ -352,10 +424,11 @@ class _EpisodeDetailsPageState extends State<EpisodeDetailsPage> {
                     ],
                   ],
                 ),
-                if (_userExistingRating != null) ...[
+                if (_userExistingRating != null && userRating != -2) ...[
                   const SizedBox(height: 6),
                   Text(
-                    'Your Rating: ${_userExistingRating!.toStringAsFixed(0)} / 10',
+                    userRating != -1 ? 'Your Rating: ${_userExistingRating!.toStringAsFixed(0)} / 10' :
+                    'You watched, but didn\'t leave a rating',
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
@@ -363,25 +436,31 @@ class _EpisodeDetailsPageState extends State<EpisodeDetailsPage> {
                     ),
                   ),
                 ],
+                if(userExistingReview != null)...[
+                  const SizedBox(height: 4),
+                  GestureDetector(onTap: () {setState(() {hideReview = !hideReview;});},
+                    child: 
+                      Text(hideReview ? 'Show Review' : 'Hide Review\n${userExistingReview!}',
+                        style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.deepPurple
+                        )
+                      )
+                  )
+                ],
                 const SizedBox(height: 20),
-                
-                // Rate Episode Button
-                SizedBox(
-                  width: double.infinity,
-                  height: 45,
-                  child: ElevatedButton.icon(
-                    onPressed: _showRatingDialog,
-                    icon: const Icon(Icons.star_rate),
-                    label: Text(
-                      _userExistingRating != null ? 'Update Episode Rating' : 'Rate this Episode',
-                      style: const TextStyle(fontSize: 15),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.amber[700],
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ),
+                _userExistingRating != null ?
+                  Row(
+                    children: [
+                      _buildRateButton(),
+                      Spacer(),
+                      _buildRemoveRatingButton()
+                    ]
+
+                  ) :
+                  _buildRateButton(),
+
                 const SizedBox(height: 25),
 
                 const Text(
@@ -397,6 +476,143 @@ class _EpisodeDetailsPageState extends State<EpisodeDetailsPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> removeRatingInfo() async{
+    final user = FirebaseAuth.instance.currentUser;
+    if(user == null){
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text(
+        'You must be logged in to handle ratings'
+      )));
+      return;
+    }
+
+    final docId ='tv_${widget.tvId}_s${widget.seasonNumber}_e${widget.episodeNumber}';
+    final mediaRatingRef = FirebaseFirestore.instance.collection('MediaRatings').doc(docId);
+    final userRatingRef = FirebaseFirestore.instance.collection('Users').doc(user.uid).collection('Ratings').doc(docId);
+    try{
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Removing rating...'))
+      );
+
+        await FirebaseFirestore.instance.runTransaction((transaction) async {
+        final mediaSnapshot = await transaction.get(mediaRatingRef);
+
+        double currentAvg;
+        int currentCount;
+        final tmdbAvg = (_episodeData?['vote_average'] as num? ?? 0.0).toDouble();
+
+        if (mediaSnapshot.exists) {
+          currentAvg = (mediaSnapshot.data()?['averageRating'] ?? 0.0).toDouble();
+          currentCount = (mediaSnapshot.data()?['ratingCount'] ?? 1).toInt();
+        } else {
+          currentAvg = tmdbAvg;
+          currentCount = 1;
+        }
+
+        double newAvg;
+        int newCount;
+
+        double userRating = _userExistingRating != null ? _userExistingRating as double : -2;
+
+        if (_userExistingRating != null && userRating >= 0) {
+          // --- CASE 1: Updating an existing rating ---
+          // Formula: ((averageRating * ratingCount) - oldUsrRating + newRating) / ratingCount
+          // No need to update the rating count in this scenario.
+          if (currentCount > 1) {
+            newAvg = ((currentAvg * currentCount) - _userExistingRating!) /
+                (currentCount-1);
+          } else {
+            newAvg = 0;
+          }
+          newCount = currentCount - 1;
+                  // Update global media rating document
+          transaction.set(
+            mediaRatingRef,
+            {
+              'averageRating': newAvg,
+              'ratingCount': newCount,
+            },
+            SetOptions(merge: true),
+          );
+          if(mounted) {
+            setState(() {
+              _firebaseAverageRating = newAvg;
+              _firebaseRatingCount = newCount;
+            });
+          }
+        }
+        else if(_userExistingRating == null){
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: 
+            Text('Please rate this title before removing it')));
+            return;
+        }
+
+
+
+        userRatingRef.delete();
+
+        if (mounted) {
+          setState(() {
+            _userExistingRating = null;
+            userExistingReview = null;
+          });
+        }
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Rating removed successfully!')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to remove rating: $e')),
+      );
+    }
+  }
+
+  Widget _buildRemoveRatingButton(){
+    double screenWidth = MediaQuery.of(context).size.width;
+    return SizedBox(
+      width: 24 * screenWidth  / 50,
+      height: 50,
+      child: ElevatedButton.icon(
+        onPressed: _isLoading ? null : removeRatingInfo,
+        icon: const Icon(Icons.delete),
+        label: Text(
+          'Remove rating',
+          style: const TextStyle(fontSize: 16),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.amber[700],
+          foregroundColor: Colors.white
+        )
+      )
+    );
+  }
+
+  Widget _buildRateButton() {
+    double screenWidth = MediaQuery.of(context).size.width;
+     while (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return SizedBox(
+      width: _userExistingRating != null ? 24 * screenWidth / 50 : screenWidth,
+      height: 50,
+      child: ElevatedButton.icon(
+        onPressed: _showRatingDialog,
+        icon: const Icon(Icons.star_rate),
+        label: Text(
+          _userExistingRating != null ? 'Update Your Rating' : 'Rate this Title',
+          style: const TextStyle(fontSize: 16),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.amber[700],
+          foregroundColor: Colors.white,
+        ),
       ),
     );
   }
