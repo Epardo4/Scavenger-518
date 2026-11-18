@@ -98,6 +98,16 @@ class _AuthPageState extends State<AuthPage>{
       }
 
       if(!isLogin){
+        final existingUserName = await FirebaseFirestore.instance.collection('Users').
+            where('username', isEqualTo: userNameController.text.trim()).get();
+        
+        if(existingUserName.size > 0){
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Username ${userNameController.text.trim()} already exists, please enter a different username.'))
+          );
+          return;
+        }
+
         if(userNameController.text.trim().isEmpty){
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Please enter a username.'))

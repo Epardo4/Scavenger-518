@@ -26,6 +26,10 @@ class _EpisodeDetailsPageState extends State<EpisodeDetailsPage> {
   bool _isLoading = true;
   String? _errorMessage;
   final reviewController = TextEditingController();
+  List<dynamic> reviewedUsers = [];
+  bool liking = false;
+
+
 
   // Custom Firebase Rating State
   double? _firebaseAverageRating;
@@ -34,6 +38,7 @@ class _EpisodeDetailsPageState extends State<EpisodeDetailsPage> {
   String? userExistingReview;
   bool onToWatchList = false;
   bool hideReview = true;
+  bool loadingReviews = true;
 
 
   @override
@@ -41,6 +46,105 @@ class _EpisodeDetailsPageState extends State<EpisodeDetailsPage> {
     super.initState();
     _loadEpisodeDetails();
     _loadFirebaseRating();
+    _loadReviews();
+  }
+
+  //final docId = 'tv_${widget.tvId}_s${widget.seasonNumber}_e${widget.episodeNumber}';
+
+  Future<void> like(List<dynamic> review) async {
+    try{
+      setState(() {liking = true;});
+      String docId = 'user_${review[1]}_tv_${widget.tvId}_s${widget.seasonNumber}_e${widget.episodeNumber}';
+      bool liked = false;
+      bool disliked = false;
+      final user = FirebaseAuth.instance.currentUser;
+      final existingLike = await FirebaseFirestore.instance.collection('Users').doc(user!.uid).collection('Likes').doc(docId).get();
+      if(existingLike.exists){
+        existingLike['liked'] ? liked = true : disliked = true;
+      }
+      if(liked) {
+        await FirebaseFirestore.instance.collection('Users').doc(user!.uid).collection('Likes').doc(docId).delete();
+      }
+      else{
+        await FirebaseFirestore.instance.collection('Users').doc(user!.uid).collection('Likes').doc(docId).set({
+          'liked': true
+        });
+      }
+      String mediaString = 'tv_${widget.tvId}_s${widget.seasonNumber}_e${widget.episodeNumber}';
+      final rating = await FirebaseFirestore.instance.collection('Users').doc(review[0]).
+          collection('Ratings').doc(mediaString).get();
+      int likeCount = 0;
+      int dislikeCount = 0;
+      if(rating.data()!.containsKey('dislikes')){
+        dislikeCount = rating['dislikes'];
+      }
+      if(rating.data()!.containsKey('likes')) {
+        likeCount = rating['likes'];
+      }
+      likeCount = liked ? likeCount - 1 : likeCount + 1;
+      dislikeCount = disliked ? dislikeCount - 1 : dislikeCount;
+      await FirebaseFirestore.instance.collection('Users').doc(review[0]).collection('Ratings').doc(mediaString).update({
+        'likes': likeCount,
+        'dislikes': dislikeCount
+      });
+      setState(() {
+        review[5] = liked ? -1 : 1;
+        review[3] = likeCount;
+        review[4] = dislikeCount;
+        liking = false;
+      });
+    }catch(e){
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: 
+        Text('Failed to like: $e')));
+    }
+  }
+
+  Future<void> dislike(List<dynamic> review) async {
+    try{
+      setState(() {liking = true;});
+      String docId = 'user_${review[1]}_tv_${widget.tvId}_s${widget.seasonNumber}_e${widget.episodeNumber}';
+      bool liked = false;
+      bool disliked = false;
+      final user = FirebaseAuth.instance.currentUser;
+      final existingLike = await FirebaseFirestore.instance.collection('Users').doc(user!.uid).collection('Likes').doc(docId).get();
+      if(existingLike.exists){
+        existingLike['liked'] ? liked = true : disliked = true;
+      }
+      if(disliked) {
+        await FirebaseFirestore.instance.collection('Users').doc(user!.uid).collection('Likes').doc(docId).delete();
+      }
+      else{
+        await FirebaseFirestore.instance.collection('Users').doc(user!.uid).collection('Likes').doc(docId).set({
+          'liked': false
+        });
+      }
+      String mediaString = 'tv_${widget.tvId}_s${widget.seasonNumber}_e${widget.episodeNumber}';
+      final rating = await FirebaseFirestore.instance.collection('Users').doc(review[0]).
+          collection('Ratings').doc(mediaString).get();
+      int likeCount = 0;
+      int dislikeCount = 0;
+      if(rating.data()!.containsKey('dislikes')){
+        dislikeCount = rating['dislikes'];
+      }
+      if(rating.data()!.containsKey('likes')) {
+        likeCount = rating['likes'];
+      }
+      likeCount = liked ? likeCount - 1 : likeCount;
+      dislikeCount = disliked ? dislikeCount - 1 : dislikeCount + 1;
+      await FirebaseFirestore.instance.collection('Users').doc(review[0]).collection('Ratings').doc(mediaString).update({
+        'likes': likeCount,
+        'dislikes': dislikeCount
+      });
+      setState(() {
+        review[5] = disliked ? -1 : 0;
+        review[3] = likeCount;
+        review[4] = dislikeCount;
+        liking = false;
+      });
+    }catch(e){
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: 
+        Text('Failed to dislike: $e')));
+    }
   }
 
   Future<void> _loadEpisodeDetails() async {
@@ -72,6 +176,47 @@ class _EpisodeDetailsPageState extends State<EpisodeDetailsPage> {
         _isLoading = false;
         _errorMessage = 'Failed to load episode details.';
       });
+    }
+  }
+  
+  Future<void> _loadReviews() async {
+    try{
+      setState(() {_isLoading = true;});
+      String mediaString = 'tv_${widget.tvId}_s${widget.seasonNumber}_e${widget.episodeNumber}';
+      final users = await FirebaseFirestore.instance.collection('Users').get();
+      final currentUser = await FirebaseAuth.instance.currentUser;
+      
+      for(var user in users.docs){
+        final rating = await FirebaseFirestore.instance.collection('Users').doc(user.id).
+          collection('Ratings').doc(mediaString).get();
+          if(rating.exists && user.id != currentUser?.uid){
+            int likeCount = 0;
+            if(rating.data()!.containsKey('likes')){
+              likeCount = rating['likes'];
+            }
+            int dislikeCount = 0;
+            if(rating.data()!.containsKey('dislikes')){
+              dislikeCount = rating['dislikes'];
+            }
+            final liked = await FirebaseFirestore.instance.collection('Users').doc(currentUser?.uid).collection('Likes').
+              doc('user_${user['username']}_$mediaString').get();
+            int likedIndex = -1;
+            if(liked.exists){
+              liked['liked'] ? likedIndex = 1 : likedIndex = 0;
+            }
+            setState(() {
+              reviewedUsers.add([user.id, user['username'], rating, likeCount, dislikeCount, likedIndex]);
+            });
+          }
+      }
+      setState(() {
+        _isLoading = false;
+        loadingReviews = false;
+      });
+
+    }catch(e){
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: 
+        Text('Failed to load reviews: $e')));
     }
   }
 
@@ -475,11 +620,108 @@ class _EpisodeDetailsPageState extends State<EpisodeDetailsPage> {
                   overview.isEmpty ? 'No overview available.' : overview,
                   style: const TextStyle(fontSize: 16, height: 1.5),
                 ),
+                _buildReviews()
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildReviews(){
+    if(_isLoading || loadingReviews){
+      return Column(
+        children: [
+          SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator()
+            ]
+          )
+      ]);
+    }
+    if(reviewedUsers.isEmpty && _isLoading == false){
+      return 
+      Column( children: [
+        SizedBox(height: 20),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text('No other reviews yet', style: TextStyle(fontSize: 30))
+          ]
+      )]);
+    }
+    return Column(
+      children: [
+        Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text('Reviews', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 40, color: Colors.indigo))
+              ]
+            ),
+        for(var ratingDetails in reviewedUsers) ... [
+          Column(children: [
+            SizedBox(height: 30),
+            Row(
+              children: [
+                Text('${ratingDetails[1]}', style: TextStyle(fontWeight: FontWeight.bold,
+                  fontSize: 21)),
+                SizedBox(width: 20),
+                if(ratingDetails[2].data()['rating'] != -1) ... [
+                  Icon(Icons.star, size: 21, color: Colors.amber),
+                  Text('${ratingDetails[2].data()['rating']}/10', style: TextStyle(fontWeight: FontWeight.bold,
+                    fontSize: 21)),
+                ]
+                else ... [
+                  Icon(Icons.movie, size: 21, color: Colors.blue),
+                  Text('Didn\'t rate', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 21))
+                ],
+              ]
+            ),
+            SizedBox(height: 5),
+            if(ratingDetails[2].data()['review'] != null) ... [
+              Row(
+                children: [
+                  Text('Review:', style: TextStyle(fontSize: 20)),
+                  SizedBox(width: 8),
+                  Text('${ratingDetails[2].data()['review']}')
+                ]
+              )
+            ],
+            Row( children: [
+              Column( children: [
+                IconButton(
+                  icon: Icon(Icons.thumb_up),
+                  iconSize: 20,
+                  color: ratingDetails[5] == 1 ? Colors.blue : Colors.blueGrey ,
+                  onPressed: () {
+                    like(ratingDetails);
+                  }
+                ),
+
+                liking ? SizedBox(height: 15, width: 15, child: CircularProgressIndicator()) :
+                Text('${ratingDetails[3]}', style: TextStyle(fontSize: 15))
+              ]),
+              Column(children: [
+                IconButton(
+                  icon: Icon(Icons.thumb_down),
+                  iconSize: 20,
+                  color: ratingDetails[5] == 0 ? Colors.blue : Colors.blueGrey,
+                  onPressed: () {
+                    dislike(ratingDetails);
+                  }
+                ),
+
+                liking ? SizedBox(height: 15, width: 15, child: CircularProgressIndicator()) :
+                Text('${ratingDetails[4]}', style: TextStyle(fontSize: 15))
+              ])
+            ])
+          ],
+          ),
+        ]
+      ]
     );
   }
 
