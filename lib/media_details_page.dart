@@ -143,7 +143,10 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
         review[4] = dislikeCount;
         liking = false;
       });
-    }catch(e){}
+    }catch(e){
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: 
+        Text('Failed to like: $e')));
+    }
   }
 
   Future<void> dislike(List<dynamic> review) async {
@@ -191,7 +194,10 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
         review[4] = dislikeCount;
         liking = false;
       });
-    }catch(e){}
+    }catch(e){
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: 
+        Text('Failed to dislike: $e')));
+    }
   }
 
   Future<void> _loadReviews() async {
@@ -232,7 +238,10 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
           }
       }
 
-    }catch(e){}
+    }catch(e){
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: 
+        Text('Failed to load reviews: $e')));
+    }
   }
 
   Future<void> _loadMedia() async {

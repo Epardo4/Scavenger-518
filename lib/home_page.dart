@@ -25,11 +25,13 @@ class _HomePageState extends State<HomePage> {
   List<Media> _topTvShows = [];
   bool _isLoading = true;
   String? _errorMessage;
+  String? username;
 
   @override
   void initState() {
     super.initState();
     _loadTopRatedContent();
+    
   }
 
   @override
@@ -45,6 +47,13 @@ class _HomePageState extends State<HomePage> {
     });
 
     try {
+      final user = FirebaseAuth.instance.currentUser;
+      if(user != null){
+        final userInfo = await FirebaseFirestore.instance.collection('Users').doc(user.uid).get();
+        setState(() {
+          username = userInfo['username'];
+        });
+      }
       final results = await Future.wait([
         _tmdbService.getTopRatedMovies(),
         _tmdbService.getTopRatedTvShows(),
@@ -148,7 +157,7 @@ class _HomePageState extends State<HomePage> {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              user?.email ?? 'Scavenger User',
+                              username ?? 'Scavenger User',
                               style: const TextStyle(
                                 color: Colors.white70,
                                 fontSize: 13,
