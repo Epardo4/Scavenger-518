@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'tmdb_service.dart';
+import 'friends.dart';
 
 class EpisodeDetailsPage extends StatefulWidget {
   final int tvId;
@@ -450,6 +451,8 @@ class _EpisodeDetailsPageState extends State<EpisodeDetailsPage> {
                   )
                 ],
                 const SizedBox(height: 20),
+                _buildRecommendToFriendsButton(name, stillPath ?? ''),      
+                const SizedBox(height: 20),
                 _userExistingRating != null ?
                   Row(
                     children: [
@@ -593,6 +596,33 @@ class _EpisodeDetailsPageState extends State<EpisodeDetailsPage> {
       )
     );
   }
+
+  Widget _buildRecommendToFriendsButton(String tvShowTitle, String stillPath) {
+  return SizedBox(
+    width: double.infinity,
+    height: 50,
+    child: ElevatedButton.icon(
+      onPressed: () => showRecommendDialog(
+        context,
+        mediaId: widget.tvId,
+        mediaType: 'tv',
+        title: tvShowTitle,
+        posterPath: stillPath,
+        seasonNumber: widget.seasonNumber,
+        episodeNumber: widget.episodeNumber,
+      ),
+      icon: const Icon(Icons.send),
+      label: const Text(
+        'Recommend Episode to Friends',
+        style: TextStyle(fontSize: 16),
+      ),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.deepPurple,
+        foregroundColor: Colors.white,
+      ),
+    ),
+  );
+}
 
   Widget _buildRateButton() {
     double screenWidth = MediaQuery.of(context).size.width;

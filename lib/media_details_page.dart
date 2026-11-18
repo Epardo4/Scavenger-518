@@ -6,6 +6,7 @@ import 'episode_details_page.dart';
 import 'Models/media.dart';
 import 'tmdb_service.dart';
 import 'actor_details_page.dart';
+import 'friends.dart'; // <-- Added to access showRecommendDialog
 
 const Map<String, String> _providerSearchUrls = {
   'netflix': 'https://www.netflix.com/search?q=',
@@ -68,7 +69,6 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
   bool _isLoading = true;
   String? _errorMessage;
   bool hideReview = true;
-
 
   // Custom Firebase Rating State
   double? _firebaseAverageRating;
@@ -248,7 +248,6 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
         _isLoading = false;
         final seasons = data['seasons'] as List<dynamic>? ?? [];
         
-        // Find the first valid season greater than 0 (skipping Specials/Season 0)
         final validSeason = seasons.firstWhere(
           (s) => (s['season_number'] as int? ?? 0) > 0,
           orElse: () => seasons.isNotEmpty ? seasons.first : {'season_number': 1},
@@ -269,7 +268,7 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
       });
     }
   }
-  //making the addmedia button work
+
   Future<void> addMedia() async{
     if(_isLoading || _media == null) return;
     final user = FirebaseAuth.instance.currentUser;
@@ -280,7 +279,7 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
       return;
     }
 
-    final title = _isMovie ? _media!['title'] ?? 'Unknown Title' : _media!['title'] ?? 'Unknown Title';
+    final title = _isMovie ? _media!['title'] ?? 'Unknown Title' : _media!['name'] ?? 'Unknown Title';
 
     final docId = '${widget.mediaType.name}_${widget.mediaId}';
     final watchListRef = FirebaseFirestore.instance.collection('Users').doc(user.uid).collection('Watchlist').doc(docId);
@@ -322,65 +321,63 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
   }
 
   Future<void> _loadSeasonEpisodes(int seasonNumber) async {
-  setState(() {
-    _isLoadingEpisodes = true;
-  });
-  try {
-    final seasonData = await _tmdbService.getSeasonDetails(widget.mediaId, seasonNumber);
-    if (!mounted) return;
     setState(() {
-      _seasonEpisodes = seasonData['episodes'] as List<dynamic>? ?? [];
-      _isLoadingEpisodes = false;
+      _isLoadingEpisodes = true;
     });
-    for(int i = 0; i < _seasonEpisodes.length; i++){
-      List<double> ratings = await _loadEpisodeFirebaseRating(seasonNumber,_seasonEpisodes[i]['episode_number'] as int);
-      if(ratings[0] == -1) ratings[0] = _seasonEpisodes[i]['vote_average'];
-      setState(() {_seasonEpisodeRatings.add(ratings);});
-    }
-  } catch (_) {
-    if (!mounted) return;
-    setState(() {
-      _seasonEpisodes = [];
-      _isLoadingEpisodes = false;
-    });
-  }
-}
-
-Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumber) async{
-  try{
-    final docId = 'tv_${widget.mediaId}_s${seasonNumber}_e${episodeNumber}';
-    final firestore = FirebaseFirestore.instance;
-    final doc = await firestore.collection('MediaRatings').doc(docId).get();
-    double avgRating;
-    double userRating;
-    if(doc.exists && mounted){
-      avgRating = doc.data()?['averageRating'] as double;
-    }
-    else{
-      avgRating = -1;
-    }
-    final user = FirebaseAuth.instance.currentUser;
-    if(user != null){
-      final userRatingDoc = await firestore.collection('Users').doc(user.uid).collection('Ratings').doc(docId).get();
-      if(userRatingDoc.exists && mounted){
-        userRating = userRatingDoc.data()?['rating'] as double;
+    try {
+      final seasonData = await _tmdbService.getSeasonDetails(widget.mediaId, seasonNumber);
+      if (!mounted) return;
+      setState(() {
+        _seasonEpisodes = seasonData['episodes'] as List<dynamic>? ?? [];
+        _isLoadingEpisodes = false;
+      });
+      for(int i = 0; i < _seasonEpisodes.length; i++){
+        List<double> ratings = await _loadEpisodeFirebaseRating(seasonNumber,_seasonEpisodes[i]['episode_number'] as int);
+        if(ratings[0] == -1) ratings[0] = _seasonEpisodes[i]['vote_average'];
+        setState(() {_seasonEpisodeRatings.add(ratings);});
       }
-      else  userRating = -2;
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _seasonEpisodes = [];
+        _isLoadingEpisodes = false;
+      });
     }
-    else userRating = -2;
-    return [avgRating,userRating];
-  }catch(e){
-    print(e);
-    return [-1,-2];
   }
-}
+
+  Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumber) async{
+    try{
+      final docId = 'tv_${widget.mediaId}_s${seasonNumber}_e${episodeNumber}';
+      final firestore = FirebaseFirestore.instance;
+      final doc = await firestore.collection('MediaRatings').doc(docId).get();
+      double avgRating;
+      double userRating;
+      if(doc.exists && mounted){
+        avgRating = doc.data()?['averageRating'] as double;
+      }
+      else{
+        avgRating = -1;
+      }
+      final user = FirebaseAuth.instance.currentUser;
+      if(user != null){
+        final userRatingDoc = await firestore.collection('Users').doc(user.uid).collection('Ratings').doc(docId).get();
+        if(userRatingDoc.exists && mounted){
+          userRating = userRatingDoc.data()?['rating'] as double;
+        }
+        else  userRating = -2;
+      }
+      else userRating = -2;
+      return [avgRating,userRating];
+    }catch(e){
+      return [-1,-2];
+    }
+  }
 
   Future<void> _loadFirebaseRating() async {
     try {
       final docId = '${widget.mediaType.name}_${widget.mediaId}';
       final firestore = FirebaseFirestore.instance;
 
-      // 1. Load global media rating
       final doc = await firestore.collection('MediaRatings').doc(docId).get();
 
       if (doc.exists && mounted) {
@@ -392,7 +389,6 @@ Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumb
         });
       }
 
-      // 2. Load current user's specific rating for this title, if logged in
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
         final userRatingDoc = await firestore
@@ -407,13 +403,11 @@ Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumb
             _userExistingRating =
                 (userRatingDoc.data()?['rating'] as num?)?.toDouble();
           });
-            userExistingReview = (userRatingDoc.data()?['review'] as String?)?.toString();
-            userRecommended = (userRatingDoc.data()?['recommended'] as bool?) ?? false;
+          userExistingReview = (userRatingDoc.data()?['review'] as String?)?.toString();
+          userRecommended = (userRatingDoc.data()?['recommended'] as bool?) ?? false;
         }
       }
-    } catch (_) {
-      // Fail silently if offline or uninitialized
-    }
+    } catch (_) {}
   }
 
   Future<void> getListData() async{
@@ -430,9 +424,7 @@ Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumb
           });
         }
       }
-    } catch(_){
-
-    }
+    } catch(_){}
   }
 
   Future<void> removeRatingInfo() async{
@@ -452,7 +444,7 @@ Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumb
         const SnackBar(content: Text('Removing rating...'))
       );
 
-        await FirebaseFirestore.instance.runTransaction((transaction) async {
+      await FirebaseFirestore.instance.runTransaction((transaction) async {
         final mediaSnapshot = await transaction.get(mediaRatingRef);
 
         double currentAvg;
@@ -473,9 +465,6 @@ Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumb
         double userRating = _userExistingRating != null ? _userExistingRating as double : -2;
 
         if (_userExistingRating != null && userRating >= 0) {
-          // --- CASE 1: Updating an existing rating ---
-          // Formula: ((averageRating * ratingCount) - oldUsrRating + newRating) / ratingCount
-          // No need to update the rating count in this scenario.
           if (currentCount > 1) {
             newAvg = ((currentAvg * currentCount) - _userExistingRating!) /
                 (currentCount-1);
@@ -483,7 +472,7 @@ Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumb
             newAvg = 0;
           }
           newCount = currentCount - 1;
-                  // Update global media rating document
+          
           transaction.set(
             mediaRatingRef,
             {
@@ -502,10 +491,8 @@ Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumb
         else if(_userExistingRating == null){
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: 
             Text('Please rate this title before removing it')));
-            return;
+          return;
         }
-
-
 
         userRatingRef.delete();
 
@@ -556,79 +543,72 @@ Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumb
 
       await FirebaseFirestore.instance.runTransaction((transaction) async {
         final mediaSnapshot = await transaction.get(mediaRatingRef);
-      double currentAvg;
-      int currentCount;
-      final tmdbAvg = (_media?['vote_average'] as num? ?? 0.0).toDouble();
+        double currentAvg;
+        int currentCount;
+        final tmdbAvg = (_media?['vote_average'] as num? ?? 0.0).toDouble();
 
-      if (mediaSnapshot.exists) {
-        currentAvg = (mediaSnapshot.data()?['averageRating'] ?? 0.0).toDouble();
-        currentCount = (mediaSnapshot.data()?['ratingCount'] ?? 1).toInt();
-      } else {
-        currentAvg = tmdbAvg;
-        currentCount = 1;
-      }
-
-      double newAvg;
-      int newCount;
-
-      if(userRating >= 0){
-
-        if (_userExistingRating != null && _userExistingRating! != -1) {
-          // --- CASE 1: Updating an existing rating ---
-          // Formula: ((averageRating * ratingCount) - oldUsrRating + newRating) / ratingCount
-          // No need to update the rating count in this scenario.
-          if (currentCount > 0) {
-            newAvg = ((currentAvg * currentCount) - _userExistingRating! + userRating) /
-                currentCount;
-          } else {
-            newAvg = userRating;
-          }
-          newCount = currentCount;
+        if (mediaSnapshot.exists) {
+          currentAvg = (mediaSnapshot.data()?['averageRating'] ?? 0.0).toDouble();
+          currentCount = (mediaSnapshot.data()?['ratingCount'] ?? 1).toInt();
         } else {
-          // --- CASE 2: Submitting a new rating ---
-          newAvg = ((currentAvg * currentCount) + userRating) / (currentCount + 1);
-          newCount = currentCount + 1;
+          currentAvg = tmdbAvg;
+          currentCount = 1;
         }
 
-        // Update global media rating document
-        transaction.set(
-          mediaRatingRef,
-          {
-            'averageRating': newAvg,
-            'ratingCount': newCount,
-          },
-          SetOptions(merge: true),
-        );
+        double newAvg;
+        int newCount;
 
-        setState(() {
-            _firebaseAverageRating = newAvg;
-            _firebaseRatingCount = newCount;
-        });
-      }
-      else{
-        if(_userExistingRating != null && _userExistingRating! != -1){
-          if(currentCount > 1){
-            newAvg = ((currentCount * currentAvg) - _userExistingRating!)/(currentCount-1);
-            newCount = currentCount - 1;
+        if(userRating >= 0){
+          if (_userExistingRating != null && _userExistingRating! != -1) {
+            if (currentCount > 0) {
+              newAvg = ((currentAvg * currentCount) - _userExistingRating! + userRating) /
+                  currentCount;
+            } else {
+              newAvg = userRating;
+            }
+            newCount = currentCount;
+          } else {
+            newAvg = ((currentAvg * currentCount) + userRating) / (currentCount + 1);
+            newCount = currentCount + 1;
           }
-          else{
-            newAvg = 0;
-            newCount = 0;
-          }
-          transaction.set(mediaRatingRef,{
-            'averageRating': newAvg,
-            'ratingCount': newCount
-          },
-          SetOptions(merge: true));
+
+          transaction.set(
+            mediaRatingRef,
+            {
+              'averageRating': newAvg,
+              'ratingCount': newCount,
+            },
+            SetOptions(merge: true),
+          );
 
           setState(() {
             _firebaseAverageRating = newAvg;
             _firebaseRatingCount = newCount;
           });
         }
-      }
+        else{
+          if(_userExistingRating != null && _userExistingRating! != -1){
+            if(currentCount > 1){
+              newAvg = ((currentCount * currentAvg) - _userExistingRating!)/(currentCount-1);
+              newCount = currentCount - 1;
+            }
+            else{
+              newAvg = 0;
+              newCount = 0;
+            }
+            transaction.set(mediaRatingRef,{
+              'averageRating': newAvg,
+              'ratingCount': newCount
+            },
+            SetOptions(merge: true));
 
-        // Save/Update user's personal rating record
+            setState(() {
+              _firebaseAverageRating = newAvg;
+              _firebaseRatingCount = newCount;
+            });
+          }
+        }
+
         String title = 'Unknown title';
         if (_media != null) {
           if (widget.mediaType == MediaType.movie) {
@@ -654,7 +634,7 @@ Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumb
               'recommended': userRecommended,
               'rating': userRating,
               'timestamp': FieldValue.serverTimestamp(),
-           },
+            },
             SetOptions(merge: true),
           );
         }
@@ -669,7 +649,7 @@ Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumb
               'rating': userRating,
               'review': reviewController.text.trim(),
               'timestamp': FieldValue.serverTimestamp(),
-           },
+            },
             SetOptions(merge: true),
           );
           setState(() {
@@ -809,7 +789,7 @@ Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumb
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isMovie ? 'Movie Details' : 'TV Show Details'), //
+        title: Text(_isMovie ? 'Movie Details' : 'TV Show Details'),
       ),
       body: _buildBody(),
     );
@@ -877,10 +857,14 @@ Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumb
                 const SizedBox(height: 25),
                 _buildBasicInformation(releaseDate, _getRuntime()),
                 const SizedBox(height: 25),
+
+                // Recommend to Friends Button[cite: 58]
+                _buildRecommendToFriendsButton(title, posterPath ?? ''),
+                const SizedBox(height: 15),
+
                 _userExistingRating != null ?
                 Row(
                   children: [
-                    // Rate Button above overview
                     _buildRateButton(),
                     Spacer(),
                     _buildRemoveRatingButton()
@@ -901,19 +885,16 @@ Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumb
                 _buildSection(title: 'Genres', child: _buildGenres(genres)),
                 const SizedBox(height: 20),
                 
-                // Streaming Services Section
                 _buildStreamingSection(),
                 const SizedBox(height: 20),
 
                 if (!_isMovie) ...[
-                _buildEpisodesSection(),
-                const SizedBox(height: 20),
+                  _buildEpisodesSection(),
+                  const SizedBox(height: 20),
                 ],
                 _buildCastOrReviews(),
                 SizedBox(height: 30),
                 showCast ? _buildCast(cast) : _buildReviews(),
-                  // _buildSection(title: 'Cast', child: _buildCast(cast)),
-                  // _buildSection(title: 'Reviews', child: _buildReviews()),
                 const SizedBox(height: 25),
                 _buildWatchlistButton(),
                 const SizedBox(height: 20),
@@ -921,6 +902,32 @@ Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumb
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Button to open the friend recommendation dialog[cite: 58]
+  Widget _buildRecommendToFriendsButton(String title, String posterPath) {
+    return SizedBox(
+      width: double.infinity,
+      height: 50,
+      child: ElevatedButton.icon(
+        onPressed: () => showRecommendDialog(
+          context,
+          mediaId: widget.mediaId,
+          mediaType: widget.mediaType.name,
+          title: title,
+          posterPath: posterPath,
+        ),
+        icon: const Icon(Icons.send),
+        label: const Text(
+          'recommend to friends',
+          style: TextStyle(fontSize: 16),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.deepPurple,
+          foregroundColor: Colors.white,
+        ),
       ),
     );
   }
@@ -1040,7 +1047,7 @@ Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumb
     );
   }
 
-    Widget _buildEpisodesSection() {
+  Widget _buildEpisodesSection() {
     final seasons = (_media?['seasons'] as List<dynamic>? ?? [])
         .where((s) => (s['season_number'] as int? ?? 0) > 0)
         .toList();
@@ -1156,12 +1163,6 @@ Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumb
                             ]
                           ) :
                           Center(child: CircularProgressIndicator()),
-
-
-                          // title: Text(
-                          //   '$epNum. $epName',
-                          //   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                          // ),
                           subtitle: Text(
                             overview,
                             maxLines: 2,
@@ -1194,7 +1195,6 @@ Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumb
       child: const Icon(Icons.tv, size: 24, color: Colors.grey),
     );
   }
-
 
   Widget _buildBackdrop(String? backdropPath) {
     if (backdropPath == null || backdropPath.isEmpty) {
@@ -1272,7 +1272,6 @@ Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumb
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
                       color: Colors.deepPurple
-                
                 ))),
               ]
             ],
@@ -1457,8 +1456,7 @@ Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumb
   }
 
   Widget _buildWatchlistButton() {
-    return 
-    SizedBox(
+    return SizedBox(
       width: double.infinity,
       height: 50,
       child: ElevatedButton.icon(
@@ -1476,7 +1474,6 @@ Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumb
     final results = watchProviders['results'] as Map<String, dynamic>?;
     if (results == null) return const SizedBox.shrink();
 
-    // Default to US region data, or fallback to the first available region
     final regionData = results['US'] as Map<String, dynamic>? ?? 
                        (results.isNotEmpty ? results.values.first as Map<String, dynamic>? : null);
     if (regionData == null) return const SizedBox.shrink();
@@ -1555,8 +1552,6 @@ Future<List<double>> _loadEpisodeFirebaseRating(int seasonNumber,int episodeNumb
       onOpen: (name) => _openProvider(name, tmdbLink),
     );
   }
-
-
 }
 
 class StreamingProviderChips extends StatelessWidget {

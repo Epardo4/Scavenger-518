@@ -2,7 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'media_details_page.dart';
+import 'episode_details_page.dart';
 import 'Models/media.dart';
+
+// Type definitions to avoid nested angle bracket syntax issues
+typedef ChatQuerySnapshot = QuerySnapshot<Map<String, dynamic>>;
+typedef ChatDocumentSnapshot = DocumentSnapshot<Map<String, dynamic>>;
+typedef UserCollectionReference = CollectionReference<Map<String, dynamic>>;
 
 class Friend {
   final String uid;
@@ -28,11 +34,205 @@ class FriendRating {
   Timestamp? get timestamp => data['timestamp'] as Timestamp?;
 }
 
+class ChatService {
+  static final _db = FirebaseFirestore.instance;
+  static String get me => FirebaseAuth.instance.currentUser!.uid;
+
+  static String getChatId(String uid1, String uid2) {
+    final list = [uid1, uid2]..sort();
+    return '${list[0]}_${list[1]}';
+  }
+
+  static Stream<ChatQuerySnapshot> getChatsStream() {
+    return _db
+        .collection('Chats')
+        .where('participants', arrayContains: me)
+        .orderBy('lastTimestamp', descending: true)
+        .snapshots();
+  }
+
+  static Stream<ChatQuerySnapshot> getMessagesStream(String chatId) {
+    return _db
+        .collection('Chats')
+        .doc(chatId)
+        .collection('Messages')
+        .orderBy('timestamp', descending: true)
+        .snapshots();
+  }
+
+  static Future<void> sendMessage({
+    required String recipientUid,
+    required String text,
+    Map<String, dynamic>? recommendation,
+  }) async {
+    final chatId = getChatId(me, recipientUid);
+    final chatRef = _db.collection('Chats').doc(chatId);
+
+    final batch = _db.batch();
+    batch.set(
+      chatRef,
+      {
+        'participants': [me, recipientUid],
+        'lastMessage': recommendation != null ? 'Recommended: ${recommendation['title']}' : text,
+        'lastTimestamp': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+
+    final msgRef = chatRef.collection('Messages').doc();
+    batch.set(msgRef, {
+      'senderId': me,
+      'text': text,
+      'timestamp': FieldValue.serverTimestamp(),
+      'recommendation': ?recommendation,
+    });
+
+    await batch.commit();
+  }
+}
+
+Future<void> showRecommendDialog(
+  BuildContext context, {
+  required int mediaId,
+  required String mediaType,
+  required String title,
+  required String posterPath,
+  int? seasonNumber,
+  int? episodeNumber,
+}) async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return;
+
+  final friendSnap = await FirebaseFirestore.instance
+      .collection('Users')
+      .doc(user.uid)
+      .collection('Friends')
+      .get();
+  
+  final friends = friendSnap.docs
+      .map((d) => Friend(uid: d.id, username: d.data()['username'] as String? ?? ''))
+      .toList();
+
+  if (friends.isEmpty) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('You need to add friends before recommending titles!')),
+    );
+    return;
+  }
+
+  final selectedFriends = <String>{};
+  final messageController = TextEditingController();
+
+  // Format title nicely if it's an episode
+  final displayTitle = seasonNumber != null && episodeNumber != null
+      ? '$title (S${seasonNumber}E$episodeNumber)'
+      : title;
+
+  await showDialog(
+    context: context,
+    builder: (context) {
+      return StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: Text('Recommend "$displayTitle"'),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Select friends to send recommendation:'),
+                  const SizedBox(height: 10),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 200),
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: friends.length,
+                      itemBuilder: (context, index) {
+                        final f = friends[index];
+                        final isSelected = selectedFriends.contains(f.uid);
+                        return CheckboxListTile(
+                          title: Text('@${f.username}'),
+                          value: isSelected,
+                          onChanged: (val) {
+                            setDialogState(() {
+                              if (val == true) {
+                                selectedFriends.add(f.uid);
+                              } else {
+                                selectedFriends.remove(f.uid);
+                              }
+                            });
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: messageController,
+                    decoration: const InputDecoration(
+                      labelText: 'Optional message',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: selectedFriends.isEmpty
+                    ? null
+                    : () async {
+                        final text = messageController.text.trim().isEmpty
+                            ? 'Check out this recommendation!'
+                            : messageController.text.trim();
+
+                        final recommendationMap = <String, dynamic>{
+                          'mediaId': mediaId,
+                          'mediaType': mediaType,
+                          'title': displayTitle,
+                          'posterPath': posterPath,
+                        };
+
+                        if (seasonNumber != null && episodeNumber != null) {
+                          recommendationMap['seasonNumber'] = seasonNumber;
+                          recommendationMap['episodeNumber'] = episodeNumber;
+                        }
+
+                        for (final recipientUid in selectedFriends) {
+                          await ChatService.sendMessage(
+                            recipientUid: recipientUid,
+                            text: text,
+                            recommendation: recommendationMap,
+                          );
+                        }
+
+                        if (!context.mounted) return;
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Recommendation sent successfully!')),
+                        );
+                      },
+                child: const Text('Send'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+}
+
 class FriendsService {
   static final _db = FirebaseFirestore.instance;
   static String get me => FirebaseAuth.instance.currentUser!.uid;
 
-  static CollectionReference<Map<String, dynamic>> _friends(String uid) =>
+  static UserCollectionReference _friends(String uid) =>
       _db.collection('Users').doc(uid).collection('Friends');
 
   static Stream<List<Friend>> friendsStream() => _friends(me).snapshots().map(
@@ -44,13 +244,12 @@ class FriendsService {
             .toList(),
       );
 
-  static Stream<QuerySnapshot<Map<String, dynamic>>> incomingRequests() =>
+  static Stream<ChatQuerySnapshot> incomingRequests() =>
       _db.collection('FriendRequests').where('to', isEqualTo: me).snapshots();
 
-  static Stream<QuerySnapshot<Map<String, dynamic>>> outgoingRequests() =>
+  static Stream<ChatQuerySnapshot> outgoingRequests() =>
       _db.collection('FriendRequests').where('from', isEqualTo: me).snapshots();
 
-  /// Prefix search on username (case-sensitive).
   static Future<List<Friend>> searchUsers(String query) async {
     final q = query.trim();
     if (q.isEmpty) return [];
@@ -110,10 +309,9 @@ class FriendsService {
   }
 }
 
-
 class _FriendsData {
   final List<Friend> friends;
-  final List<FriendRating> ratings; // newest first
+  final List<FriendRating> ratings;
   final Set<String> myRatedIds;
   const _FriendsData(this.friends, this.ratings, this.myRatedIds);
 }
@@ -177,14 +375,18 @@ class _FriendsPageState extends State<FriendsPage> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Column(
         children: [
-          const TabBar(tabs: [
-            Tab(text: 'Activity'),
-            Tab(text: 'For You'),
-            Tab(text: 'Friends'),
-          ]),
+          const TabBar(
+            isScrollable: true,
+            tabs: [
+              Tab(text: 'Activity'),
+              Tab(text: 'For You'),
+              Tab(text: 'Friends'),
+              Tab(text: 'Messages'),
+            ],
+          ),
           Expanded(
             child: TabBarView(
               children: [
@@ -199,6 +401,255 @@ class _FriendsPageState extends State<FriendsPage> {
                   builder: (data) => _RecommendationList(data: data),
                 ),
                 _ManageFriendsTab(onChanged: _refresh),
+                const _MessagesTab(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MessagesTab extends StatelessWidget {
+  const _MessagesTab();
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<ChatQuerySnapshot>(
+      stream: ChatService.getChatsStream(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final docs = snapshot.data?.docs ?? [];
+        if (docs.isEmpty) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(32),
+              child: Text(
+                'No messages yet. Start a conversation from your friends list or recommend a movie!',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey, fontSize: 16),
+              ),
+            ),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: docs.length,
+          itemBuilder: (context, index) {
+            final chat = docs[index].data();
+            final participants = List<String>.from(chat['participants'] ?? []);
+            final otherUid = participants.firstWhere(
+              (id) => id != FirebaseAuth.instance.currentUser!.uid,
+              orElse: () => '',
+            );
+
+            return FutureBuilder<ChatDocumentSnapshot>(
+              future: FirebaseFirestore.instance.collection('Users').doc(otherUid).get(),
+              builder: (context, userSnap) {
+                final username = userSnap.data?.data()?['username'] as String? ?? 'User';
+                final lastMessage = chat['lastMessage'] as String? ?? '';
+
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  child: ListTile(
+                    leading: const CircleAvatar(child: Icon(Icons.person)),
+                    title: Text('@$username', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Text(lastMessage, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ChatScreen(
+                            friend: Friend(uid: otherUid, username: username),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class ChatScreen extends StatefulWidget {
+  final Friend friend;
+  const ChatScreen({super.key, required this.friend});
+
+  @override
+  State<ChatScreen> createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends State<ChatScreen> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _send() async {
+    final text = _controller.text.trim();
+    if (text.isEmpty) return;
+    _controller.clear();
+
+    try {
+      await ChatService.sendMessage(
+        recipientUid: widget.friend.uid,
+        text: text,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to send message: $e')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final chatId = ChatService.getChatId(ChatService.me, widget.friend.uid);
+
+    return Scaffold(
+      appBar: AppBar(title: Text('@${widget.friend.username}')),
+      body: Column(
+        children: [
+          Expanded(
+            child: StreamBuilder<ChatQuerySnapshot>(
+              stream: ChatService.getMessagesStream(chatId),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                final docs = snapshot.data?.docs ?? [];
+                if (docs.isEmpty) {
+                  return const Center(child: Text('Say hello or send a recommendation!'));
+                }
+
+                return ListView.builder(
+                  reverse: true,
+                  padding: const EdgeInsets.all(16),
+                  itemCount: docs.length,
+                  itemBuilder: (context, index) {
+                    final msg = docs[index].data();
+                    final isMe = msg['senderId'] == ChatService.me;
+                    final text = msg['text'] as String? ?? '';
+                    final recommendation = msg['recommendation'] as Map<String, dynamic>?;
+
+                    return Align(
+                      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(vertical: 4),
+                        padding: const EdgeInsets.all(12),
+                        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+                        decoration: BoxDecoration(
+                          color: isMe ? Colors.deepPurple[100] : Colors.grey[200],
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (recommendation != null) ...[
+                              InkWell(
+                                onTap: () {
+                                  final mediaId = (recommendation['mediaId'] as num?)?.toInt();
+                                  final mediaTypeStr = recommendation['mediaType'] as String? ?? 'movie';
+                                  final seasonNum = (recommendation['seasonNumber'] as num?)?.toInt();
+                                  final episodeNum = (recommendation['episodeNumber'] as num?)?.toInt();
+
+                                  if (mediaId != null) {
+                                    if (seasonNum != null && episodeNum != null) {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => EpisodeDetailsPage(
+                                            tvId: mediaId,
+                                            seasonNumber: seasonNum,
+                                            episodeNumber: episodeNum,
+                                          ),
+                                        ),
+                                      );
+                                    } else {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => MediaDetailsPage(
+                                            mediaId: mediaId,
+                                            mediaType: mediaTypeStr == 'tv' ? MediaType.tv : MediaType.movie,
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  }
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.all(8),
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.movie, color: Colors.deepPurple),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          recommendation['title'] ?? 'Title',
+                                          style: const TextStyle(fontWeight: FontWeight.bold),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      const Icon(Icons.chevron_right, size: 16),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                            Text(text, style: const TextStyle(fontSize: 15)),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    textInputAction: TextInputAction.send,
+                    onSubmitted: (_) => _send(),
+                    decoration: InputDecoration(
+                      hintText: 'Type a message...',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(24)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.send, color: Colors.deepPurple),
+                  onPressed: _send,
+                ),
               ],
             ),
           ),
@@ -261,7 +712,6 @@ Widget _emptyScroll(String message) => ListView(
       ],
     );
 
-
 class _ActivityList extends StatelessWidget {
   final _FriendsData data;
   const _ActivityList({required this.data});
@@ -285,12 +735,11 @@ class _ActivityList extends StatelessWidget {
   }
 }
 
-
 class _RecommendationList extends StatelessWidget {
   final _FriendsData data;
   const _RecommendationList({required this.data});
 
-  static const double _minRating = 8; // out of 10
+  static const double _minRating = 8;
 
   @override
   Widget build(BuildContext context) {
@@ -453,11 +902,11 @@ class _ManageFriendsTabState extends State<_ManageFriendsTab> {
         final friends = friendsSnap.data ?? [];
         final friendIds = friends.map((f) => f.uid).toSet();
 
-        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        return StreamBuilder<ChatQuerySnapshot>(
           stream: FriendsService.outgoingRequests(),
           builder: (context, outSnap) {
             final pendingOut =
-                (outSnap.data?.docs ?? []).map((d) => d['to'] as String).toSet();
+                (outSnap.data?.docs ?? []).map((d) => d.data()['to'] as String).toSet();
 
             return ListView(
               padding: const EdgeInsets.all(16),
@@ -502,8 +951,7 @@ class _ManageFriendsTabState extends State<_ManageFriendsTab> {
                     ),
                   const Divider(),
                 ],
-                // Incoming requests
-                StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                StreamBuilder<ChatQuerySnapshot>(
                   stream: FriendsService.incomingRequests(),
                   builder: (context, inSnap) {
                     final docs = inSnap.data?.docs ?? [];
@@ -562,10 +1010,23 @@ class _ManageFriendsTabState extends State<_ManageFriendsTab> {
                   ListTile(
                     leading: const CircleAvatar(child: Icon(Icons.person)),
                     title: Text('@${f.username}'),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.person_remove_outlined),
-                      tooltip: 'Remove friend',
-                      onPressed: () => _remove(f),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.chat_bubble_outline),
+                          tooltip: 'Chat',
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => ChatScreen(friend: f)),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.person_remove_outlined),
+                          tooltip: 'Remove friend',
+                          onPressed: () => _remove(f),
+                        ),
+                      ],
                     ),
                     onTap: () => Navigator.push(
                       context,
@@ -582,7 +1043,6 @@ class _ManageFriendsTabState extends State<_ManageFriendsTab> {
   }
 }
 
-
 class FriendProfilePage extends StatefulWidget {
   final Friend friend;
   const FriendProfilePage({super.key, required this.friend});
@@ -592,24 +1052,35 @@ class FriendProfilePage extends StatefulWidget {
 }
 
 class _FriendProfilePageState extends State<FriendProfilePage> {
-  int _tab = 0; // 0 watched, 1 reviews, 2 top picks
+  int _tab = 0;
 
   @override
   Widget build(BuildContext context) {
     final f = widget.friend;
     return Scaffold(
-      appBar: AppBar(title: Text('@${f.username}')),
+      appBar: AppBar(
+        title: Text('@${f.username}'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.chat),
+            tooltip: 'Chat',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => ChatScreen(friend: f)),
+            ),
+          ),
+        ],
+      ),
       body: Column(
         children: [
-          StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+          StreamBuilder<ChatDocumentSnapshot>(
             stream: FirebaseFirestore.instance
                 .collection('Users')
                 .doc(f.uid)
                 .snapshots(),
             builder: (context, snap) {
-              final p = snap.data?.data() ?? {};
-              final name =
-                  '${p['first'] ?? ''} ${p['last'] ?? ''}'.trim();
+              final Map<String, dynamic> p = snap.data?.data() ?? <String, dynamic>{};
+              final name = '${p['first'] ?? ''} ${p['last'] ?? ''}'.trim();
               return Padding(
                 padding: const EdgeInsets.all(20),
                 child: Row(
@@ -642,14 +1113,14 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
             segments: const [
               ButtonSegment(value: 0, label: Text('Watched')),
               ButtonSegment(value: 1, label: Text('Reviews')),
-              ButtonSegment(value: 3, label: Text('Recommended')),
+              ButtonSegment(value: 2, label: Text('Recommended')),
             ],
             selected: {_tab},
             onSelectionChanged: (s) => setState(() => _tab = s.first),
           ),
           const SizedBox(height: 12),
           Expanded(
-            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            child: StreamBuilder<ChatQuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('Users')
                   .doc(f.uid)
@@ -699,7 +1170,6 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
     );
   }
 }
-
 
 void openMedia(BuildContext context, Map<String, dynamic> data) {
   final id = (data['mediaId'] as num?)?.toInt();
@@ -820,7 +1290,7 @@ class _PosterCard extends StatelessWidget {
                   child: posterUrl.isNotEmpty
                       ? Image.network(posterUrl,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => _placeholder())
+                          errorBuilder: (_, _, _) => _placeholder())
                       : _placeholder(),
                 ),
               ),
@@ -846,20 +1316,6 @@ class _PosterCard extends StatelessWidget {
         ),
       );
 }
-
-class _InfoChip extends StatelessWidget {
-  final IconData icon;
-  final String text;
-
-  const _InfoChip({required this.icon, required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Chip(avatar: Icon(icon, size: 17), label: Text(text));
-  }
-
-}
-
 
 class _TypeChip extends StatelessWidget {
   final bool isMovie;
