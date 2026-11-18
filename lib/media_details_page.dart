@@ -948,7 +948,7 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
               color: Colors.indigo
             )) : 
             Text('Cast', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 40,
-              color: Colors.grey
+              color: Theme.of(context).colorScheme.onSurfaceVariant
             ))
           ),
           SizedBox(width: 20),
@@ -964,7 +964,7 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
               color: Colors.indigo
             )) : 
             Text('Reviews', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 40,
-              color: Colors.grey
+              color: Theme.of(context).colorScheme.onSurfaceVariant
             ))
           )
       ]);
@@ -1167,7 +1167,7 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
                             overview,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                            style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
                           ),
                           onTap: () {
                             Navigator.push(
@@ -1191,7 +1191,7 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
 
   Widget _episodePlaceholder() {
     return Container(
-      color: Colors.grey[300],
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
       child: const Icon(Icons.tv, size: 24, color: Colors.grey),
     );
   }
@@ -1249,7 +1249,7 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
                 const SizedBox(height: 4),
                 Text(
                   '($_firebaseRatingCount community ratings)',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
               ],
               if (_userExistingRating != null && userRating != -2) ...[
@@ -1302,7 +1302,7 @@ class _MediaDetailsPageState extends State<MediaDetailsPage> {
     return Container(
       width: 130,
       height: 195,
-      color: Colors.grey[300],
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
       child: const Icon(Icons.movie, size: 50),
     );
   }

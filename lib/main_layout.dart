@@ -4,7 +4,7 @@ import 'home_page.dart';
 import 'profile_page.dart';
 import 'search_screen.dart';
 import 'friends.dart';
-import 'main.dart'; // For themeNotifier
+import 'main.dart';
 
 class MainLayout extends StatefulWidget {
   const MainLayout({super.key});

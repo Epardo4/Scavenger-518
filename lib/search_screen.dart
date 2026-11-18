@@ -160,7 +160,7 @@ class _SearchScreenState extends State<SearchScreen> {
     final availableGenres = _availableResultGenres;
 
     return Container(
-      color: Colors.grey[50],
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -235,7 +235,7 @@ class _SearchScreenState extends State<SearchScreen> {
       ),
     );
   }
-
+  
   Widget _buildResultsView() {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());

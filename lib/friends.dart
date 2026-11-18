@@ -384,7 +384,6 @@ class _FriendsPageState extends State<FriendsPage> {
               Tab(text: 'Activity'),
               Tab(text: 'For You'),
               Tab(text: 'Friends'),
-              Tab(text: 'Messages'),
             ],
           ),
           Expanded(
@@ -401,83 +400,11 @@ class _FriendsPageState extends State<FriendsPage> {
                   builder: (data) => _RecommendationList(data: data),
                 ),
                 _ManageFriendsTab(onChanged: _refresh),
-                const _MessagesTab(),
               ],
             ),
           ),
         ],
       ),
-    );
-  }
-}
-
-class _MessagesTab extends StatelessWidget {
-  const _MessagesTab();
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<ChatQuerySnapshot>(
-      stream: ChatService.getChatsStream(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        final docs = snapshot.data?.docs ?? [];
-        if (docs.isEmpty) {
-          return const Center(
-            child: Padding(
-              padding: EdgeInsets.all(32),
-              child: Text(
-                'No messages yet. Start a conversation from your friends list or recommend a movie!',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey, fontSize: 16),
-              ),
-            ),
-          );
-        }
-
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: docs.length,
-          itemBuilder: (context, index) {
-            final chat = docs[index].data();
-            final participants = List<String>.from(chat['participants'] ?? []);
-            final otherUid = participants.firstWhere(
-              (id) => id != FirebaseAuth.instance.currentUser!.uid,
-              orElse: () => '',
-            );
-
-            return FutureBuilder<ChatDocumentSnapshot>(
-              future: FirebaseFirestore.instance.collection('Users').doc(otherUid).get(),
-              builder: (context, userSnap) {
-                final username = userSnap.data?.data()?['username'] as String? ?? 'User';
-                final lastMessage = chat['lastMessage'] as String? ?? '';
-
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  child: ListTile(
-                    leading: const CircleAvatar(child: Icon(Icons.person)),
-                    title: Text('@$username', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text(lastMessage, maxLines: 1, overflow: TextOverflow.ellipsis),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => ChatScreen(
-                            friend: Friend(uid: otherUid, username: username),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                );
-              },
-            );
-          },
-        );
-      },
     );
   }
 }
@@ -548,14 +475,22 @@ class _ChatScreenState extends State<ChatScreen> {
                     final text = msg['text'] as String? ?? '';
                     final recommendation = msg['recommendation'] as Map<String, dynamic>?;
 
-                    return Align(
+                   return Align(
                       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
                       child: Container(
                         margin: const EdgeInsets.symmetric(vertical: 4),
                         padding: const EdgeInsets.all(12),
                         constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
                         decoration: BoxDecoration(
-                          color: isMe ? Colors.deepPurple[100] : Colors.grey[200],
+                          // 1. Set background to transparent so it respects your theme background
+                          color: Colors.transparent,
+                          // 2. Add an outline border using theme colors
+                          border: Border.all(
+                            color: isMe 
+                                ? Theme.of(context).colorScheme.primary 
+                                : Theme.of(context).colorScheme.outline,
+                            width: 1.5,
+                          ),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Column(
@@ -598,12 +533,12 @@ class _ChatScreenState extends State<ChatScreen> {
                                   padding: const EdgeInsets.all(8),
                                   margin: const EdgeInsets.only(bottom: 8),
                                   decoration: BoxDecoration(
-                                    color: Colors.white,
+                                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Row(
                                     children: [
-                                      const Icon(Icons.movie, color: Colors.deepPurple),
+                                      Icon(Icons.movie, color: Theme.of(context).colorScheme.primary),
                                       const SizedBox(width: 8),
                                       Expanded(
                                         child: Text(
@@ -619,12 +554,18 @@ class _ChatScreenState extends State<ChatScreen> {
                                 ),
                               ),
                             ],
-                            Text(text, style: const TextStyle(fontSize: 15)),
+                            // 3. Ensure text automatically adapts to theme text contrast
+                            Text(
+                              text, 
+                              style: TextStyle(
+                                fontSize: 15,
+                                color: Theme.of(context).colorScheme.onSurface,
+                              ),
+                            ),
                           ],
                         ),
                       ),
-                    );
-                  },
+                    ); },
                 );
               },
             ),

@@ -174,13 +174,18 @@ class _HomePageState extends State<HomePage> {
                   onSubmitted: (_) => _handleHomeSearchSubmit(),
                   decoration: InputDecoration(
                     hintText: 'Search movies & TV shows...',
-                    prefixIcon: const Icon(Icons.search, color: Colors.deepPurple),
                     suffixIcon: IconButton(
                       icon: const Icon(Icons.arrow_forward),
                       onPressed: _handleHomeSearchSubmit,
                     ),
                     filled: true,
-                    fillColor: Colors.grey[100],
+                    fillColor: Theme.of(context).brightness == Brightness.dark 
+                        ? Colors.grey[850] 
+                        : Colors.grey[100],
+                    prefixIcon: Icon(
+                      Icons.search, 
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide.none,
