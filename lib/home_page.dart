@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // <-- Added Firestore import
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'tmdb_service.dart';
 import 'Models/media.dart';
 import 'media_details_page.dart';
 import 'search_screen.dart';
-import 'profile_page.dart';
-import 'main.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -23,13 +21,14 @@ class _HomePageState extends State<HomePage> {
 
   List<Media> _topMovies = [];
   List<Media> _topTvShows = [];
+  List<Media> _friendsPopularMedia = [];
   bool _isLoading = true;
   String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _loadTopRatedContent();
+    _loadHomePageData();
   }
 
   @override
@@ -38,7 +37,7 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
-  Future<void> _loadTopRatedContent() async {
+  Future<void> _loadHomePageData() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -48,6 +47,7 @@ class _HomePageState extends State<HomePage> {
       final results = await Future.wait([
         _tmdbService.getTopRatedMovies(),
         _tmdbService.getTopRatedTvShows(),
+        _loadFriendsPopularMedia(),
       ]);
 
       if (!mounted) return;
@@ -55,14 +55,69 @@ class _HomePageState extends State<HomePage> {
       setState(() {
         _topMovies = results[0];
         _topTvShows = results[1];
+        _friendsPopularMedia = results[2];
         _isLoading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _errorMessage = 'Failed to load top rated content.';
+        _errorMessage = 'Failed to load home page content.';
       });
+    }
+  }
+
+  Future<List<Media>> _loadFriendsPopularMedia() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return [];
+
+    try {
+      final db = FirebaseFirestore.instance;
+      final friendSnap = await db.collection('Users').doc(user.uid).collection('Friends').get();
+      if (friendSnap.docs.isEmpty) return [];
+
+      final friendUids = friendSnap.docs.map((d) => d.id).toList();
+      final Map<String, Media> uniqueMediaMap = {};
+
+      for (final friendUid in friendUids) {
+        final ratingsSnap = await db
+            .collection('Users')
+            .doc(friendUid)
+            .collection('Ratings')
+            .orderBy('timestamp', descending: true)
+            .limit(10)
+            .get();
+
+        for (final doc in ratingsSnap.docs) {
+          final data = doc.data();
+          if (data['seasonNumber'] != null) continue;
+
+          final mediaId = (data['mediaId'] as num?)?.toInt();
+          final mediaTypeStr = data['mediaType'] as String? ?? 'movie';
+          final title = data['title'] as String? ?? 'Unknown Title';
+          final posterPath = data['posterPath'] as String? ?? '';
+          final rating = (data['rating'] as num?)?.toDouble() ?? 0.0;
+
+          if (mediaId != null && !uniqueMediaMap.containsKey('${mediaTypeStr}_$mediaId')) {
+            final mediaType = mediaTypeStr == 'tv' ? MediaType.tv : MediaType.movie;
+            uniqueMediaMap['${mediaTypeStr}_$mediaId'] = Media(
+              id: mediaId,
+              title: title,
+              posterPath: posterPath,
+              overview: '',
+              rating: rating,
+              releaseDate: '',
+              type: mediaType,
+            );
+          }
+        }
+      }
+
+      final mediaList = uniqueMediaMap.values.toList();
+      mediaList.shuffle();
+      return mediaList;
+    } catch (_) {
+      return [];
     }
   }
 
@@ -106,7 +161,7 @@ class _HomePageState extends State<HomePage> {
 
     return Scaffold(
       body: RefreshIndicator(
-        onRefresh: _loadTopRatedContent,
+        onRefresh: _loadHomePageData,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.symmetric(vertical: 16.0),
@@ -181,7 +236,7 @@ class _HomePageState extends State<HomePage> {
                     filled: true,
                     fillColor: Theme.of(context).brightness == Brightness.dark 
                         ? Colors.grey[850] 
-                        : Colors.grey[100],
+                        : Colors.grey.shade100,
                     prefixIcon: Icon(
                       Icons.search, 
                       color: Theme.of(context).colorScheme.primary,
@@ -217,7 +272,7 @@ class _HomePageState extends State<HomePage> {
                         Text(_errorMessage!),
                         const SizedBox(height: 12),
                         ElevatedButton(
-                          onPressed: _loadTopRatedContent,
+                          onPressed: _loadHomePageData,
                           child: const Text('Try Again'),
                         ),
                       ],
@@ -225,17 +280,25 @@ class _HomePageState extends State<HomePage> {
                   ),
                 )
               else ...[
+                // Popular Among Friends Section
+                if (_friendsPopularMedia.isNotEmpty) ...[
+                  _buildSectionHeader('Popular Among Friends', Icons.people_outline),
+                  const SizedBox(height: 12),
+                  _buildHorizontalMediaList(_friendsPopularMedia, showRank: false),
+                  const SizedBox(height: 28),
+                ],
+
                 // Top 10 Movies
                 _buildSectionHeader('Top 10 Movies', Icons.movie_outlined),
                 const SizedBox(height: 12),
-                _buildHorizontalMediaList(_topMovies),
+                _buildHorizontalMediaList(_topMovies, showRank: true),
 
                 const SizedBox(height: 28),
 
                 // Top 10 TV Shows
                 _buildSectionHeader('Top 10 TV Shows', Icons.tv_outlined),
                 const SizedBox(height: 12),
-                _buildHorizontalMediaList(_topTvShows),
+                _buildHorizontalMediaList(_topTvShows, showRank: true),
               ],
             ],
           ),
@@ -263,7 +326,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildHorizontalMediaList(List<Media> items) {
+  Widget _buildHorizontalMediaList(List<Media> items, {bool showRank = true}) {
     return SizedBox(
       height: 250,
       child: ListView.builder(
@@ -291,32 +354,33 @@ class _HomePageState extends State<HomePage> {
                                 height: 180,
                                 width: 130,
                                 fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => _posterPlaceholder(),
+                                errorBuilder: (_, _, _) => _posterPlaceholder(),
                               )
                             : _posterPlaceholder(),
                       ),
-                      Positioned(
-                        top: 6,
-                        left: 6,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.black87,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            '#${index + 1}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
+                      if (showRank)
+                        Positioned(
+                          top: 6,
+                          left: 6,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black87,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '#${index + 1}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                         ),
-                      ),
                       Positioned(
                         bottom: 6,
                         right: 6,
@@ -351,7 +415,7 @@ class _HomePageState extends State<HomePage> {
     return Container(
       height: 180,
       width: 130,
-      color: Colors.grey[300],
+      color: Colors.grey.shade300,
       child: const Icon(Icons.movie, size: 40, color: Colors.grey),
     );
   }
